@@ -1,6 +1,8 @@
 # JavaScript/TypeScript Formatter Benchmark
 
-Comparing execution time and memory usage of **Prettier**, **Biome**, **Oxfmt**, and **tsv**.
+Fork of [oxc-project/bench-formatter](https://github.com/oxc-project/bench-formatter) with tsv — comparing execution time and memory usage of [Prettier](https://prettier.io/), [Biome](https://biomejs.dev/), [Oxfmt](https://oxc.rs), and [tsv](https://tsv.fuz.dev).
+
+> **About this fork:** adds [tsv](https://tsv.fuz.dev) (native-Rust TypeScript/CSS/Svelte formatter) to the comparison. tsv has no JSX/TSX support, so it runs only in the `.ts`-only scenarios — `bench-ts-only` (a `.ts` corpus harvested from the fuz ecosystem) and `bench-large-single-file` (`parser.ts`); the upstream scenarios are unchanged. tsv is a native binary built from a sibling `../tsv` checkout (or `TSV_BIN`), not an npm package. See [Formatters](#formatters) and [CLAUDE.md](CLAUDE.md).
 
 ## Formatters
 
