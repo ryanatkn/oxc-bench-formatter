@@ -1,0 +1,40 @@
+{
+  "$schema": "../node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "useIgnoreFile": false
+  },
+  "files": {
+    "includes": ["**/*.ts"]
+  },
+  "formatter": {
+    "formatWithErrors": true
+  },
+  "linter": {
+    "enabled": false
+  },
+  "json": {
+    "formatter": {
+      "enabled": false
+    }
+  },
+  "css": {
+    "formatter": {
+      "enabled": false
+    }
+  },
+  "graphql": {
+    "formatter": {
+      "enabled": false
+    }
+  },
+  "grit": {
+    "formatter": {
+      "enabled": false
+    }
+  },
+  "html": {
+    "formatter": {
+      "enabled": false
+    }
+  }
+}

@@ -1,0 +1,4 @@
+# Include only .ts (the tsv-fair common set: no .js/.jsx/.tsx)
+*
+!*/
+!*.ts
