@@ -42,10 +42,23 @@ async function getVersions() {
       execAsync("vp exec oxfmt --version"),
     ]);
 
+    // tsv is a native binary, not an npm package — read its version from the
+    // sibling Cargo workspace ([workspace.package]), the source of truth every
+    // tsv crate/package inherits. Falls back to "unknown" if ../tsv is absent.
+    let tsv = "unknown";
+    try {
+      const cargo = await readFile("../tsv/Cargo.toml", "utf-8");
+      const m = cargo.match(/\[workspace\.package\][^[]*?^version\s*=\s*"([^"]+)"/m);
+      if (m) tsv = m[1];
+    } catch {
+      // ../tsv not present
+    }
+
     return {
       prettier: prettier.stdout.trim(),
       biome: biome.stdout.trim().replace("Version: ", ""),
       oxfmt: oxfmt.stdout.trim().replace("Version: ", ""),
+      tsv,
     };
   } catch (error) {
     console.error("Error fetching versions:", error);
@@ -83,8 +96,8 @@ ${benchmarkResults}
 
   // Update versions section
   const versionsRegex =
-    /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*/;
-  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}`;
+    /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*tsv\*\*: .*/;
+  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **tsv**: ${versions.tsv}`;
 
   if (versionsRegex.test(readmeContent)) {
     readmeContent = readmeContent.replace(versionsRegex, newVersionsContent);

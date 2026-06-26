@@ -42,10 +42,12 @@ async function main() {
     "-n=prettier+oxc-parser",
     "-n=biome",
     "-n=oxfmt",
+    "-n=tsv",
     formatters.prettier(dataFile),
     formatters.prettier(dataFile, "prettierrc-oxc.json"),
     formatters.biome(dataFile),
     formatters.oxfmt(dataFile),
+    formatters.tsv(dataFile),
   ]);
 
   await runMemoryBenchmarks(
@@ -68,6 +70,11 @@ async function main() {
       {
         name: "oxfmt",
         command: formatters.oxfmt(dataFile),
+        prepare: prepareCmd,
+      },
+      {
+        name: "tsv",
+        command: formatters.tsv(dataFile),
         prepare: prepareCmd,
       },
     ],

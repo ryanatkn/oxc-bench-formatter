@@ -15,6 +15,10 @@ export function createFormatters(projectRoot, configDir) {
   const prettierBin = `${projectRoot}/node_modules/.bin/prettier`;
   const biomeBin = `${projectRoot}/node_modules/.bin/biome`;
   const oxfmtBin = `${projectRoot}/node_modules/.bin/oxfmt`;
+  // tsv is a native Rust binary from the sibling tsv repo, not an npm bin.
+  // Override with the TSV_BIN env var; the default resolves the release build
+  // checked out next to this repo (../tsv relative to the project root).
+  const tsvBin = process.env.TSV_BIN ?? `${projectRoot}/../tsv/target/release/tsv`;
 
   // NOTE: Do not use `--experimental-cli`, as it seems to behave differently than the stable CLI...
   return {
@@ -25,6 +29,10 @@ export function createFormatters(projectRoot, configDir) {
       `${biomeBin} format --write --files-ignore-unknown=true --config-path ${configDir} ${files}`,
 
     oxfmt: (files) => `${oxfmtBin} --config ${configDir}/oxfmtrc.json ${files}`,
+
+    // tsv is non-configurable (no config file or flags) and formats paths in
+    // place — directory args recurse over .ts/.svelte/.css only (no JSX/TSX).
+    tsv: (files) => `${tsvBin} format ${files}`,
   };
 }
 

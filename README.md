@@ -1,6 +1,6 @@
 # JavaScript/TypeScript Formatter Benchmark
 
-Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfmt**.
+Comparing execution time and memory usage of **Prettier**, **Biome**, **Oxfmt**, and **tsv**.
 
 ## Formatters
 
@@ -8,6 +8,7 @@ Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfm
 - [Prettier](https://prettier.io/) + @prettier/plugin-oxc
 - [Biome](https://biomejs.dev/) Formatter
 - [Oxfmt](https://oxc.rs)
+- [tsv](https://tsv.fuz.dev) — native Rust; TypeScript/CSS/Svelte only (no JSX/TSX), so it runs in the `.ts`-only scenarios
 
 ## Run
 
@@ -50,6 +51,7 @@ node ./bench-full-features/bench.mjs
 - **Prettier**: 3.8.3
 - **Biome**: 2.4.16
 - **Oxfmt**: 0.54.0
+- **tsv**: 0.1.0
 
 ## Results
 
