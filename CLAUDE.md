@@ -18,6 +18,14 @@ A benchmark suite comparing JS/TS formatters on **execution time** (via
   runs only in the `.ts`-only scenarios (`bench-ts-only`,
   `bench-large-single-file`). This is the fork's addition over upstream.
 
+This suite measures the whole **CLI** (process spawn + I/O + multi-file parallel
+batch + RSS). A complementary fork,
+`../oxc-bench-javascript-parser-written-in-rust`, benchmarks the **parsers**
+(oxc, swc, tsv) **in-process** via Rust/criterion — parse throughput + RSS, no
+process or I/O overhead. There tsv is wired in as a `../tsv/crates/tsv_ts` path
+dependency (not a binary) and, for the same JSX/keyword reasons, runs on a single
+`.ts` file; see that repo's `CLAUDE.md`.
+
 All sources are ESM `.mjs`. No test framework or hand-rolled linter — quality
 gating is delegated to **vite-plus** (`vp`): `prepare` runs `vp config`, staged
 files run `vp check --fix` (see `vite.config.ts`), and `.vite-hooks/pre-commit`
