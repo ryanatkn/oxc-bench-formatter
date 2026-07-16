@@ -2,7 +2,7 @@
 
 Fork of [oxc-project/bench-formatter](https://github.com/oxc-project/bench-formatter) with tsv — comparing execution time and memory usage of [Prettier](https://prettier.io/), [Biome](https://biomejs.dev/), [Oxfmt](https://oxc.rs), and [tsv](https://tsv.fuz.dev).
 
-> **About this fork:** adds [tsv](https://tsv.fuz.dev) (native-Rust JS/TS, CSS, and Svelte formatter) to the comparison. tsv has no JSX/TSX parser, so it runs only in the JSX-free scenarios — `bench-large-single-file` (`parser.ts`) and `bench-ts-only`, a fork-added scenario benching Outline's non-JSX subset (`.ts`/`.js`/`.mjs`) with every formatter scoped to that same set. The upstream scenarios are unchanged. tsv is a native binary built from a sibling `../tsv` checkout (or `TSV_BIN`), not an npm package. Start with [How to read these numbers](#how-to-read-these-numbers) — the ratios are machine-dependent and measure the CLI, not the engine. See also [Formatters](#formatters) and [CLAUDE.md](CLAUDE.md).
+> **About this fork:** adds [tsv](https://tsv.fuz.dev) (native-Rust JS/TS, CSS, and Svelte formatter) to the comparison. tsv has no JSX/TSX parser, so it runs only in the JSX-free scenarios — `bench-large-single-file` (`parser.ts`) and `bench-ts-only`, a fork-added scenario benching Outline's non-JSX subset (`.ts`/`.js`/`.mjs`) with every formatter scoped to that same set. The upstream scenarios are unchanged. tsv is a native binary built from a sibling `../tsv` checkout (or `TSV_BIN`), not an npm package. Start with [How to read these numbers](#how-to-read-these-numbers) — the ratios are machine-dependent and measure the CLI, not the engine. See also [Why tsv isn't in every scenario](#why-tsv-isnt-in-every-scenario), [Formatters](#formatters), and [CLAUDE.md](CLAUDE.md).
 
 ## Formatters
 
@@ -10,7 +10,7 @@ Fork of [oxc-project/bench-formatter](https://github.com/oxc-project/bench-forma
 - [Prettier](https://prettier.io/) + @prettier/plugin-oxc
 - [Biome](https://biomejs.dev/) Formatter
 - [Oxfmt](https://oxc.rs)
-- [tsv](https://tsv.fuz.dev) — native Rust; the JS/TS family (`.ts`/`.mts`/`.cts`/`.js`/`.mjs`/`.cjs`, all parsed as TypeScript) plus CSS and Svelte. No JSX/TSX, so it runs only in the JSX-free scenarios
+- [tsv](https://tsv.fuz.dev) — native Rust; the JS/TS family (`.ts`/`.mts`/`.cts`/`.js`/`.mjs`/`.cjs`, all parsed as TypeScript) plus CSS and Svelte. No JSX/TSX, so it runs only in the JSX-free scenarios ([why](#why-tsv-isnt-in-every-scenario))
 
 ## Run
 
@@ -106,6 +106,40 @@ pass swallows command errors, so a formatter that _rejects_ part of a corpus wou
 still be timed — and look faster for the work it skipped. The two tsv scenarios run
 a preflight parse check first and report what each formatter rejects; both corpora
 are currently clean for all five.
+
+## Why tsv isn't in every scenario
+
+tsv runs in only two of the five scenarios — `bench-large-single-file` and
+`bench-ts-only`. It is deliberately left out of `bench-js-no-embedded`,
+`bench-mixed-embedded`, and `bench-full-features` for two independent reasons,
+either of which alone would be disqualifying:
+
+- **Parser.** tsv parses the JS/TS family, CSS, and Svelte, but has no JSX/TSX
+  parser. All three excluded corpora (Outline, Storybook, Continue) contain
+  `.tsx`, and JSX inside a `.js` file is a parse error for tsv (exit 2) where
+  prettier, biome, and oxfmt format it happily. Because hyperfine runs with
+  `--ignore-failure`, a formatter that rejected part of the corpus would be
+  _timed while skipping that work_ and look artificially fast — so tsv cannot
+  simply be pointed at these corpora.
+- **Feature scope.** Even scoped down to plain non-JSX TypeScript, two of these
+  scenarios measure work tsv does not do. `bench-mixed-embedded` measures
+  **embedded-language formatting**: reformatting a snippet of one language nested
+  inside another file — CSS in a `styled-components` template literal, GraphQL in
+  a `gql` tag, code fences in markdown, `<style>`/`<script>` blocks, and so on.
+  `bench-full-features` measures import sorting and Tailwind class sorting. tsv
+  formats whole `.ts`/`.css`/`.svelte` files and is non-configurable — it has no
+  plugins, does not reach into template literals, and does not sort imports or
+  classes. It would pass those files through _without doing the measured work_ and
+  still post a fast time — unfair in the opposite direction from erroring, and
+  quieter.
+
+`bench-ts-only` is the fair way to put tsv on a real-world repo: Outline minus its
+`.tsx` files, with every formatter scoped to the same `.ts`/`.js`/`.mjs` set and a
+preflight parse check confirming none of them reject anything.
+`bench-large-single-file` is a single `.ts` file and needs no such care. The honest
+way to widen tsv's coverage is new scenarios for its other two parsers — a CSS
+corpus and a Svelte corpus, neither present in Outline — not forcing it into
+feature comparisons it structurally loses on a technicality.
 
 ## Versions
 
