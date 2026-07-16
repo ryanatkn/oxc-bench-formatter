@@ -112,7 +112,7 @@ are currently clean for all five.
 - **Prettier**: 3.9.1
 - **Biome**: 2.5.1
 - **Oxfmt**: 0.59.0
-- **tsv**: 0.1.0
+- **tsv**: 0.2.0
 
 _Measured on: AMD Ryzen 5 PRO 7530U with Radeon Graphics · 12 threads · linux x64 — the ratios below depend on the core count; see [How to read these numbers](#how-to-read-these-numbers)._
 
