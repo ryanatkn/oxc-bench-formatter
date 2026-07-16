@@ -6,6 +6,7 @@ import {
   printHeader,
   runHyperfine,
   runMemoryBenchmarks,
+  runPreflight,
   setupCwd,
 } from "../shared/utils.mjs";
 
@@ -23,13 +24,27 @@ async function main() {
   checkGnuTime();
 
   console.log("");
-  console.log("Target: .ts harvested from the fuz-ecosystem src/ (tsv corpus subset)");
+  console.log("Target: Outline repository (non-JSX JS/TS subset)");
   console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
   console.log("- Git reset before each run");
-  console.log("- .ts only: the common file set every formatter (incl. tsv) supports");
+  console.log("- .ts/.js/.mjs only: the common file set every formatter (incl. tsv) supports");
   console.log("");
 
   const prepareCmd = `git -C ${dataDir} reset --hard`;
+
+  // Confirm every formatter accepts the whole corpus before timing it. hyperfine
+  // runs with --ignore-failure, so a tool that rejects files would otherwise be
+  // timed on the ones it skipped and look faster for it.
+  await runPreflight([
+    { name: "prettier", command: formatters.check.prettier(dataDir) },
+    {
+      name: "prettier+oxc-parser",
+      command: formatters.check.prettier(dataDir, "prettierrc-oxc.json"),
+    },
+    { name: "biome", command: formatters.check.biome(dataDir) },
+    { name: "oxfmt", command: formatters.check.oxfmt(dataDir) },
+    { name: "tsv", command: formatters.check.tsv(dataDir) },
+  ]);
 
   await runHyperfine([
     "--ignore-failure",

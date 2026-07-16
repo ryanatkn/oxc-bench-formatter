@@ -33,6 +33,15 @@ jobs:
           persist-credentials: false
           repository: outline/outline
           path: bench-js-no-embedded/data
+      # bench-ts-only benches the same repo scoped to its non-JSX subset, in its
+      # own checkout so each scenario resets its tree independently. tsv itself is
+      # not built here, so that scenario's tsv leg errors and is skipped (per-scenario
+      # errors are non-fatal); the other four formatters still run.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          repository: outline/outline
+          path: bench-ts-only/data
       # storybookjs/storybook's default branch contains gitlinks under .external/
       # without a .gitmodules file, which makes actions/checkout's post-job
       # submodule cleanup fail. Use a plain shallow clone instead.

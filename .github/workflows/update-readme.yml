@@ -1,12 +1,15 @@
 name: Update README
 
+# Manual only. This job cannot produce a complete result: it does not build tsv,
+# so the tsv legs of bench-large-single-file and bench-ts-only error out and the
+# README loses them. It also runs on a GitHub runner, whose core count differs
+# sharply from a dev machine's — and since biome, oxfmt, and tsv all scale with
+# cores while prettier does not, the ratios move with the hardware. Results are
+# only comparable when every row comes from one machine, so the README is
+# regenerated deliberately (`pnpm run update-readme` locally, where ../tsv exists)
+# rather than automatically on a lockfile bump.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "pnpm-lock.yaml"
 
 permissions: {}
 
@@ -38,6 +41,11 @@ jobs:
           persist-credentials: false
           repository: outline/outline
           path: bench-js-no-embedded/data
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          repository: outline/outline
+          path: bench-ts-only/data
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false

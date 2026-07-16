@@ -6,6 +6,7 @@ import {
   printHeader,
   runHyperfine,
   runMemoryBenchmarks,
+  runPreflight,
   setupCwd,
 } from "../shared/utils.mjs";
 
@@ -30,6 +31,20 @@ async function main() {
   console.log("");
 
   const prepareCmd = `cp ${dataFileBak} ${dataFile}`;
+
+  // Confirm every formatter accepts the corpus before timing it. hyperfine runs
+  // with --ignore-failure, so a tool that rejects the file would otherwise be
+  // timed on work it never did.
+  await runPreflight([
+    { name: "prettier", command: formatters.check.prettier(dataFile) },
+    {
+      name: "prettier+oxc-parser",
+      command: formatters.check.prettier(dataFile, "prettierrc-oxc.json"),
+    },
+    { name: "biome", command: formatters.check.biome(dataFile) },
+    { name: "oxfmt", command: formatters.check.oxfmt(dataFile) },
+    { name: "tsv", command: formatters.check.tsv(dataFile) },
+  ]);
 
   await runHyperfine([
     "--ignore-failure",

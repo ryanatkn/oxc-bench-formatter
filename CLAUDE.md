@@ -14,8 +14,8 @@ A benchmark suite comparing JS/TS formatters on **execution time** (via
 - **prettier+oxc-parser** (prettier with `@prettier/plugin-oxc`)
 - **biome** (`biome format --write`)
 - **oxfmt** (`oxfmt`)
-- **tsv** (`tsv format`) — native Rust, TypeScript/CSS/Svelte only (no JSX/TSX);
-  runs only in the `.ts`-only scenarios (`bench-ts-only`,
+- **tsv** (`tsv format`) — native Rust, JS/TS family + CSS/Svelte, no JSX/TSX;
+  runs only in the non-JSX scenarios (`bench-ts-only`,
   `bench-large-single-file`). This is the fork's addition over upstream.
 
 This suite measures the whole **CLI** (process spawn + I/O + multi-file parallel
@@ -37,13 +37,13 @@ runs `vp staged`. Package manager is pnpm 11.4.0; Node is `lts/*`.
 bench-formatter/
 ├── bench-all.mjs                    # run every scenario in sequence (`pnpm run bench`)
 ├── bench-all-and-update-readme.mjs  # run + scrape output into README (`pnpm run update-readme`)
-├── init.sh                          # install deps, clone data repos, download parser.ts, harvest .ts corpus, build tsv
+├── init.sh                          # install deps, clone data repos, download parser.ts, build tsv
 ├── shared/utils.mjs                 # the harness: formatter commands + hyperfine + memory
 ├── bench-large-single-file/         # one scenario per dir (structure below)
 ├── bench-js-no-embedded/
 ├── bench-mixed-embedded/
 ├── bench-full-features/
-├── bench-ts-only/                   # .ts-only scenario added by this fork (all 5 formatters incl. tsv)
+├── bench-ts-only/                   # non-JSX scenario added by this fork (all 5 formatters incl. tsv)
 ├── vite.config.ts / pnpm-workspace.yaml  # vite-plus tooling + catalog
 └── .github/workflows/               # ci.yml, security, update-readme
 ```
@@ -58,7 +58,7 @@ bench-<name>/
 ├── prettierrc.json     # prettier config
 ├── prettierrc-oxc.json # prettier config for the +oxc-parser variant (only where that variant is benched)
 ├── prettierignore      # prettier ignore (also used to scope which files are formatted)
-└── data/               # test corpus — gitignored; cloned/downloaded or harvested by init.sh
+└── data/               # test corpus — gitignored; cloned or downloaded by init.sh
 ```
 
 ## The harness — `shared/utils.mjs`
@@ -85,30 +85,40 @@ bench-<name>/
 
 ## Scenarios
 
-| Dir                       | Corpus                                                                        | Reset / prepare                                                    | warmup × runs | Formatters run           |
-| ------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------- | ------------------------ |
-| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                      | `cp parser.ts.bak parser.ts`                                       | 2 × 5         | all 5 (incl. tsv)        |
-| `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                 | `git reset --hard`                                                 | 3 × 10        | all 4 (no tsv — JSX/TSX) |
-| `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)        | `git reset --hard` + rm stray prettier configs                     | 1 × 3         | prettier+oxc, oxfmt      |
-| `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind) | `git reset --hard` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt      |
-| `bench-ts-only`           | `.ts` harvested from sibling fuz-ecosystem repos' `src/` (see `init.sh`)      | `git reset --hard` on the harvested snapshot                       | 2 × 5         | all 5 (incl. tsv)        |
+| Dir                       | Corpus                                                                             | Reset / prepare                                                    | warmup × runs | Formatters run           |
+| ------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------- | ------------------------ |
+| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                           | `cp parser.ts.bak parser.ts`                                       | 2 × 5         | all 5 (incl. tsv)        |
+| `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                      | `git reset --hard`                                                 | 3 × 10        | all 4 (no tsv — JSX/TSX) |
+| `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)             | `git reset --hard` + rm stray prettier configs                     | 1 × 3         | prettier+oxc, oxfmt      |
+| `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)      | `git reset --hard` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt      |
+| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset (`.ts`/`.js`/`.mjs`) | `git reset --hard` (its own outline checkout)                      | 2 × 5         | all 5 (incl. tsv)        |
 
 The two embedded/full-features scenarios deliberately drop plain-prettier and
 biome and bench only the prettier+oxc-parser vs oxfmt pair. File-type scoping is
 done per formatter: `prettierignore` (allowlist via `!*.ext`), oxfmt
 `ignorePatterns`, and biome `files.includes`. `bench-ts-only` uses the same
-three-way scoping narrowed to `.ts` (the common set every formatter, including
-tsv, supports) so the comparison is apples-to-apples; `bench-large-single-file`
-needs no scoping since its corpus is a single `.ts` file.
+three-way scoping narrowed to the non-JSX JS/TS family (the common set every
+formatter, including tsv, supports) so the comparison is apples-to-apples;
+`bench-large-single-file` needs no scoping since its corpus is a single `.ts` file.
 
-**Methodology caveat:** every scenario runs hyperfine with `--ignore-failure`
+`bench-ts-only` clones outline a **second** time rather than sharing
+`bench-js-no-embedded/data`, so each scenario resets its own tree. It benches the
+same real-world repo minus the 682 `.tsx` files tsv cannot parse, which keeps the
+corpus third-party: no formatter here is measured on code it already shaped.
+
+**Methodology — preflight:** every scenario runs hyperfine with `--ignore-failure`
 (and the memory pass swallows command errors), so a formatter that _errors_
-partway is still timed rather than penalized — one that rejected much of the
-corpus could look artificially fast. When adding a formatter — tsv is a native
-Rust parser that may reject syntax the JS tools accept — confirm it processes the
-corpus cleanly first: `tsv format --check <dir>` should report `… would change,
-… unchanged` with **no** `error:` lines (tsv currently does, clean, on the `.ts`
-corpus).
+partway would be timed rather than penalized — one that rejected much of the
+corpus could look artificially fast. The two tsv scenarios guard against this with
+`runPreflight` (`shared/utils.mjs`), which runs each formatter's **check** command
+first, parses per-file parse errors out of its diagnostics (one matcher per tool —
+they share no error format), and reports what each rejects before any timing. The
+asymmetry is real: tsv has no JSX parser, so JSX inside a `.js` file is a parse
+error for tsv and ordinary input for prettier, biome, and oxfmt. Outline's non-JSX
+subset is currently clean for all five, so preflight excludes nothing — it is a
+guard, not an active filter. The three tsv-free scenarios have no preflight; every
+formatter there is a JS-native tool that accepts the whole corpus, and a check pass
+over storybook/continue would cost minutes for no signal.
 
 **Concurrency, when reading the numbers:** the harness never caps threads, so
 each formatter runs at its own default — tsv, oxfmt, and biome parallelize across
@@ -137,22 +147,26 @@ skipped.
 `README.md`, and refreshes the `## Versions` section. The prettier/biome/oxfmt
 versions come from `vp exec <bin> --version`; tsv's comes from
 `[workspace.package]` in `../tsv/Cargo.toml` (it's a native binary, no npm
-version to query). CI (`.github/workflows`) runs `vp run bench` on push/PR; a
-separate workflow opens an auto-merging PR to refresh the README when
-`pnpm-lock.yaml` changes.
+version to query). CI (`.github/workflows/ci.yml`) runs `vp run bench` on push/PR
+as a smoke test.
 
-**Heads-up — tsv benchmarking is local-only, and the README `## Results` block
-is currently pre-tsv.** The CI workflows aren't tsv-aware: they don't check out
-`../tsv` or the sibling fuz-ecosystem repos the corpus is harvested from, so in
-CI `init.sh` skips the tsv build and harvests an _empty_ `bench-ts-only/data`,
-and the tsv scenarios error out (the run continues — per-scenario errors and
-hyperfine `--ignore-failure` are non-fatal). So the auto-PR that refreshes the
-README on `pnpm-lock.yaml` changes can never produce tsv numbers. The Versions
-list was hand-updated to include tsv, but the Results block still shows only the
-original four formatters with no `bench-ts-only` section. To regenerate it with
-tsv, run `pnpm run update-readme` **locally** (where `../tsv` and the sibling
-repos exist). Teaching CI to run tsv would mean checking the sibling repos —
-some private — into CI, a separate decision.
+**Heads-up — regenerate the README locally, on one machine.** `update-readme.yml`
+is **`workflow_dispatch` only**; it deliberately does _not_ auto-refresh the README
+on a `pnpm-lock.yaml` bump. Two reasons, both of which corrupt the results:
+
+- **CI has no tsv.** Neither workflow builds it, so the tsv legs of
+  `bench-large-single-file` and `bench-ts-only` error out and the README silently
+  loses them (per-scenario errors and hyperfine `--ignore-failure` are non-fatal,
+  so the run still "succeeds"). Nothing blocks teaching CI to build tsv now —
+  `github.com/fuzdev/tsv` is public and the corpus no longer needs the private fuz
+  repos — it just isn't wired up.
+- **Core count changes the answer.** biome, oxfmt, and tsv scale with cores while
+  prettier is effectively serial, so a runner's ratios and a dev box's ratios are
+  different numbers, not noisy versions of the same one. A README mixing rows from
+  both is not internally comparable.
+
+So regenerate with `pnpm run update-readme` **locally**, where `../tsv` exists, and
+keep every row from one machine.
 
 ## Adding a formatter or scenario
 
@@ -190,35 +204,42 @@ lives:
   is clamped to the file count, so a single-file input runs on one thread: in
   `bench-large-single-file` tsv (like every tool) is effectively single-threaded,
   and only the multi-file scenarios exercise its parallelism.
-- **No JSX/TSX**: tsv's parsers are `typescript | svelte | css` only, so it runs
-  only where the corpus is `.ts` (or, in principle, `.svelte`/`.css`):
-  `bench-large-single-file` (single `.ts` file, ideal as-is) and `bench-ts-only`
-  (a `.ts` corpus harvested by `init.sh` from sibling fuz-ecosystem repos' `src/`
-  and snapshotted as a git repo — for `git reset --hard` like the cloned
-  scenarios, and, less obviously, to anchor tsv's discovery; see the git-repo
-  bullet below). In those scenarios every _other_ formatter is scoped down to the
-  `.ts` subset so the head-to-head is apples-to-apples. The three embedded/JSX
-  scenarios are left tsv-free.
+- **No JSX/TSX**: tsv's parsers are `typescript | svelte | css`, where the
+  TypeScript parser covers the whole JS family (`.js`/`.mjs`/`.cjs` format as
+  TypeScript, a syntactic superset). What it has no parser for is JSX, so it runs
+  only where the corpus is JSX-free: `bench-large-single-file` (single `.ts` file,
+  ideal as-is) and `bench-ts-only` (outline minus its 682 `.tsx` files). In those
+  scenarios every _other_ formatter is scoped to the same non-JSX subset so the
+  head-to-head is apples-to-apples. The three embedded/JSX scenarios are left
+  tsv-free. Note the asymmetry preflight exists to catch: JSX inside a `.js` file
+  is a **parse error** for tsv (exit 2) but ordinary input for prettier, biome, and
+  oxfmt — all three format it happily.
 - **Directory discovery** (a `tsv format <dir>` arg, as the scenarios use): tsv
-  recurses over `.ts`/`.svelte`/`.css` only and is gitignore-aware — inside a git
-  repo it honors `.gitignore` (hierarchically) plus a repo-root `.formatignore` /
+  recurses over the JS/TS family (`.ts`/`.mts`/`.cts`/`.js`/`.mjs`/`.cjs`),
+  `.svelte`, and `.css`, and is gitignore-aware — inside a git repo it honors
+  `.gitignore` (hierarchically) plus a repo-root `.formatignore` /
   `.prettierignore`, always pruning `.git`/`node_modules`; outside a repo it
   applies a build-output heuristic (`dist`/`build`/`target` + hidden dirs) and
-  warns that a `.prettierignore` won't be read. Verified against `~/dev/tsv` and
-  the harvested corpus: tsv's discovered set matches the on-disk `.ts` set
-  exactly, which holds _because_ the harvest is `.ts`-only with no `.svelte`/
-  `.css`/`.d.ts` and no in-corpus ignore files — keep it that way, or tsv would
-  format files the `.ts`-scoped formatters skip and the comparison would stop
-  being apples-to-apples. (Note: tsv _does_ format `.d.ts`, since the extension
-  is `.ts`.) `tsv format <dir> --list` prints the in-scope set without writing —
-  the read-only way to confirm scope.
+  warns that a `.prettierignore` won't be read. Because tsv self-scopes by
+  extension while the other three are scoped by config, **the corpus decides
+  whether they agree** — verified on outline: tsv discovers exactly 1648 files
+  (1339 `.ts` + 308 `.js` + 1 `.mjs`) and biome and oxfmt each self-report the same 1648. That holds _because_ outline has no `.svelte`/`.css` (which tsv would grab
+  and the JS/TS-scoped configs would skip) and no in-corpus `.prettierignore`
+  (which tsv would honor and the others would not, since they're pointed at the
+  scenario's own ignore file). Re-check both if the corpus changes. (Note: tsv
+  formats `.d.ts` — the extension is `.ts` — and outline's 15 are in scope for
+  everyone via `!*.ts`.) `tsv format <dir> --list` prints the in-scope set without
+  writing — the read-only way to confirm scope.
 - **Why the corpus must stay a git repo (subtle, load-bearing):** the outer
   bench-formatter repo's `.gitignore` ignores `bench-*/data/`. `bench-ts-only`
-  only discovers anything because `init.sh` runs `git init` _inside_ `data/` —
-  that makes `data/` tsv's format root, so the outer `.gitignore` sits above the
-  root and is never read. Remove the `git init` and tsv's format root becomes the
-  bench-formatter repo, which _does_ ignore `bench-*/data/`, so discovery returns
-  **zero** files. `bench-large-single-file` sidesteps the same trap differently:
+  only discovers anything because `data/` is itself a git repo (the `git clone`
+  brings its own `.git`) — that makes `data/` tsv's format root, so the outer
+  `.gitignore` sits above the root and is never read. Hand it a corpus with no
+  `.git` and tsv's format root becomes the bench-formatter repo, which _does_
+  ignore `bench-*/data/`, so discovery returns **zero** files. Any future
+  copied/generated corpus must therefore `git init` (the old harvested `.ts`
+  snapshot did exactly that). `bench-large-single-file` sidesteps the same trap
+  differently:
   it passes the file (`./data/parser.ts`) explicitly, and an explicit file arg
   bypasses the ignore files — a `tsv format ./data` _directory_ arg there would
   be pruned by the outer `.gitignore`. Both confirmed via `--list`.
@@ -263,14 +284,26 @@ The harness resolves tsv from `TSV_BIN`, falling back to
 
 ### Future tsv work (planned, not yet done)
 
-The current coverage is `.ts`-only. tsv also formats `.svelte` and `.css`, and
-those parsers are **not yet exercised** by any scenario. Candidates:
+The current coverage is the JS/TS family. tsv also formats `.svelte` and `.css`,
+and those parsers are **not yet exercised** by any scenario (outline has neither).
+Candidates:
 
-- A Svelte/CSS corpus (or extending `bench-ts-only`'s harvest beyond `*.ts`) so
-  tsv's other two parsers get benchmarked.
-- tsv-scoped `.ts`/`.css`/`.svelte` variants of the embedded scenarios
-  (`bench-mixed-embedded`, `bench-full-features`) — i.e. narrowing those corpora
-  to tsv's supported set rather than leaving tsv out of them entirely.
+- A Svelte/CSS corpus so tsv's other two parsers get benchmarked.
+- tsv-scoped variants of the embedded scenarios (`bench-mixed-embedded`,
+  `bench-full-features`) — i.e. narrowing those corpora to tsv's supported set
+  rather than leaving tsv out of them entirely.
+- Preflight for the three tsv-free scenarios. It only guards the two tsv ones
+  today; the `--ignore-failure` caveat applies everywhere, it just has no known
+  bite where every formatter is a JS-native tool.
+- **Pin the cloned corpora.** `init.sh` and both workflows clone
+  outline/storybook/continue at their default-branch HEAD, unpinned, so the corpus
+  drifts and a rerun months apart is not comparable — and outline is now cloned
+  twice, which can land two different commits. `bench-large-single-file` already
+  pins (`v5.9.2`); the clones should too.
+- **A `--version` flag for tsv.** The README's tsv version is parsed out of
+  `../tsv/Cargo.toml` because the binary cannot report it, which is why the
+  copy-in path degrades to `unknown` and why CI would need the tsv source checked
+  out just to name a version.
 
 When adding these, keep the apples-to-apples discipline: scope _every_ formatter
 in a tsv-inclusive run to the same file set (the three-way `prettierignore` /

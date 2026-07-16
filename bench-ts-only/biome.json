@@ -4,7 +4,7 @@
     "useIgnoreFile": false
   },
   "files": {
-    "includes": ["**/*.ts"]
+    "includes": ["**/*.ts", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs"]
   },
   "formatter": {
     "formatWithErrors": true

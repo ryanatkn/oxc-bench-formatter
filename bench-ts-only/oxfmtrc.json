@@ -3,5 +3,5 @@
   "printWidth": 80,
   "useTabs": true,
   "embeddedLanguageFormatting": "off",
-  "ignorePatterns": ["*", "!*/", "!*.ts"]
+  "ignorePatterns": ["*", "!*/", "!*.ts", "!*.mts", "!*.cts", "!*.js", "!*.mjs", "!*.cjs"]
 }

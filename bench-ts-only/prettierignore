@@ -1,4 +1,10 @@
-# Include only .ts (the tsv-fair common set: no .js/.jsx/.tsx)
+# Include only the non-JSX JS/TS family — the tsv-fair common set every formatter
+# here supports. tsv has no JSX/TSX parser, so *.jsx/*.tsx stay out for everyone.
 *
 !*/
 !*.ts
+!*.mts
+!*.cts
+!*.js
+!*.mjs
+!*.cjs
