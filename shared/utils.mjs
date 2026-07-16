@@ -85,15 +85,28 @@ export async function runPreflight(checks, cwd = ".") {
 
   const failures = {};
   const excluded = new Set();
+  const unavailable = [];
 
   for (const { name, command } of checks) {
     let output = "";
+    let launchFailed = false;
     try {
       output = execSync(`${command} 2>&1`, { encoding: "utf8", stdio: "pipe", cwd });
     } catch (error) {
       // check mode exits non-zero for "would change" and for real errors alike,
-      // so the exit code carries no signal — the diagnostics do.
+      // so a normal non-zero exit carries no signal — the diagnostics do. But a
+      // 126/127 (or a spawn ENOENT) means the command never launched: a missing
+      // binary (e.g. tsv on a CI runner that never built it) must read as
+      // "unavailable", never be mistaken for "clean" for lack of a matcher hit.
+      launchFailed = error.status === 126 || error.status === 127 || error.code === "ENOENT";
       output = `${error.stdout ?? ""}${error.stderr ?? ""}`;
+    }
+
+    if (launchFailed) {
+      failures[name] = [];
+      unavailable.push(name);
+      console.log(`  ${name}: unavailable (command failed to launch)`);
+      continue;
     }
 
     const matcher = PREFLIGHT_MATCHERS[name];
@@ -107,13 +120,16 @@ export async function runPreflight(checks, cwd = ".") {
     if (unique.length > 5) console.log(`      … and ${unique.length - 5} more`);
   }
 
-  if (excluded.size === 0) {
+  for (const name of unavailable) {
+    console.log(`  → ${name} could not run — its benchmark row below is meaningless, not a pass`);
+  }
+  if (excluded.size === 0 && unavailable.length === 0) {
     console.log("  → all formatters accept the whole corpus; nothing excluded");
-  } else {
+  } else if (excluded.size > 0) {
     console.log(`  → excluding ${excluded.size} file(s) rejected by at least one formatter`);
   }
 
-  return { failures, excluded: [...excluded] };
+  return { failures, excluded: [...excluded], unavailable };
 }
 
 // ---

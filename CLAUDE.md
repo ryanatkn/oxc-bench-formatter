@@ -29,7 +29,7 @@ dependency (not a binary) and, for the same JSX/keyword reasons, runs on a singl
 All sources are ESM `.mjs`. No test framework or hand-rolled linter — quality
 gating is delegated to **vite-plus** (`vp`): `prepare` runs `vp config`, staged
 files run `vp check --fix` (see `vite.config.ts`), and `.vite-hooks/pre-commit`
-runs `vp staged`. Package manager is pnpm 11.4.0; Node is `lts/*`.
+runs `vp staged`. Package manager is pnpm 11.4.0; Node is pinned to `24`.
 
 ## Layout
 
@@ -135,12 +135,12 @@ the machine (`update-readme` records it under `## Versions`; see the README's
 
 Separating engine from thread count: comparing hyperfine's `[User: …]` times
 instead of wall times is the parallelism-neutral view — on `bench-ts-only` tsv is
-~4x oxfmt in wall-clock but ~2x in CPU work, the rest being cores oxfmt left idle.
+~3x oxfmt in wall-clock but ~2x in CPU work, the rest being cores oxfmt left idle.
 **But User time is only a clean engine proxy while threads do real work.**
 `bench-large-single-file` is _not_ the controlled single-thread exception it looks
 like: with one file to format, tsv clamps its worker count to the file count (User
 < wall, genuinely one thread) and biome likewise stays single-threaded, but **oxfmt
-still spins up a pool it cannot use** — it reports ~360ms User against ~220ms wall.
+still spins up a pool it cannot use** — it reports ~455ms User against ~235ms wall.
 That overhead inflates its User time without being formatting work, so neither the
 wall nor the CPU-work comparison in that scenario is engine-vs-engine.
 
