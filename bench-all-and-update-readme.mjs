@@ -2,9 +2,23 @@
 
 import { exec } from "child_process";
 import { readFile, writeFile } from "fs/promises";
+import os from "os";
 import { promisify } from "util";
 
 const execAsync = promisify(exec);
+
+/**
+ * The machine the numbers came from. Recorded because the ratios move with it:
+ * biome, oxfmt, and tsv all scale across cores while prettier is effectively
+ * serial, so a 4-core runner and a 12-thread laptop produce genuinely different
+ * comparisons, not noisy versions of one. Without this line the results are not
+ * reproducible or interpretable.
+ */
+function describeMachine() {
+  const cpus = os.cpus();
+  const model = cpus[0]?.model.replace(/\s+/g, " ").trim() ?? "unknown CPU";
+  return `${model} · ${cpus.length} threads · ${os.platform()} ${os.arch()}`;
+}
 
 async function runBenchmark() {
   console.log("Running benchmark...");
@@ -94,10 +108,11 @@ ${benchmarkResults}
 
   readmeContent = beforeMarker + "\n" + newBenchmarkContent + "\n" + afterMarker;
 
-  // Update versions section
+  // Update versions section. The trailing machine line is optional in the match
+  // so this still works against a README written before it existed.
   const versionsRegex =
-    /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*tsv\*\*: .*/;
-  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **tsv**: ${versions.tsv}`;
+    /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*tsv\*\*: .*(\n\n_Measured on: .*_)?/;
+  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **tsv**: ${versions.tsv}\n\n_Measured on: ${describeMachine()} — the ratios below depend on the core count; see [How to read these numbers](#how-to-read-these-numbers)._`;
 
   if (versionsRegex.test(readmeContent)) {
     readmeContent = readmeContent.replace(versionsRegex, newVersionsContent);

@@ -2,7 +2,7 @@
 
 Fork of [oxc-project/bench-formatter](https://github.com/oxc-project/bench-formatter) with tsv — comparing execution time and memory usage of [Prettier](https://prettier.io/), [Biome](https://biomejs.dev/), [Oxfmt](https://oxc.rs), and [tsv](https://tsv.fuz.dev).
 
-> **About this fork:** adds [tsv](https://tsv.fuz.dev) (native-Rust TypeScript/CSS/Svelte formatter) to the comparison. tsv has no JSX/TSX support, so it runs only in the `.ts`-only scenarios — `bench-ts-only` (a `.ts` corpus harvested from the fuz ecosystem) and `bench-large-single-file` (`parser.ts`); the upstream scenarios are unchanged. tsv is a native binary built from a sibling `../tsv` checkout (or `TSV_BIN`), not an npm package. See [Formatters](#formatters) and [CLAUDE.md](CLAUDE.md).
+> **About this fork:** adds [tsv](https://tsv.fuz.dev) (native-Rust JS/TS, CSS, and Svelte formatter) to the comparison. tsv has no JSX/TSX parser, so it runs only in the JSX-free scenarios — `bench-large-single-file` (`parser.ts`) and `bench-ts-only`, a fork-added scenario benching Outline's non-JSX subset (`.ts`/`.js`/`.mjs`) with every formatter scoped to that same set. The upstream scenarios are unchanged. tsv is a native binary built from a sibling `../tsv` checkout (or `TSV_BIN`), not an npm package. Start with [How to read these numbers](#how-to-read-these-numbers) — the ratios are machine-dependent and measure the CLI, not the engine. See also [Formatters](#formatters) and [CLAUDE.md](CLAUDE.md).
 
 ## Formatters
 
@@ -10,7 +10,7 @@ Fork of [oxc-project/bench-formatter](https://github.com/oxc-project/bench-forma
 - [Prettier](https://prettier.io/) + @prettier/plugin-oxc
 - [Biome](https://biomejs.dev/) Formatter
 - [Oxfmt](https://oxc.rs)
-- [tsv](https://tsv.fuz.dev) — native Rust; TypeScript/CSS/Svelte only (no JSX/TSX), so it runs in the `.ts`-only scenarios
+- [tsv](https://tsv.fuz.dev) — native Rust; the JS/TS family (`.ts`/`.mts`/`.cts`/`.js`/`.mjs`/`.cjs`, all parsed as TypeScript) plus CSS and Svelte. No JSX/TSX, so it runs only in the JSX-free scenarios
 
 ## Run
 
@@ -25,7 +25,13 @@ node ./bench-large-single-file/bench.mjs
 node ./bench-js-no-embedded/bench.mjs
 node ./bench-mixed-embedded/bench.mjs
 node ./bench-full-features/bench.mjs
+node ./bench-ts-only/bench.mjs
 ```
+
+Regenerate the results below with `pnpm run update-readme`. Run it **locally**,
+where a sibling `../tsv` checkout exists — CI does not build tsv, so a CI run
+silently drops tsv from the results, and its core count would not match the rest
+of the table anyway.
 
 ## Notes
 
@@ -41,12 +47,65 @@ node ./bench-full-features/bench.mjs
   - [Outline](https://github.com/outline/outline) repository (JS/JSX/TS/TSX only)
   - [Storybook](https://github.com/storybookjs/storybook) repository (mixed with embedded languages)
   - [Continue](https://github.com/continuedev/continue) repository (full features: sort imports + Tailwind CSS)
+  - [Outline](https://github.com/outline/outline) again, scoped to its non-JSX subset (`.ts`/`.js`/`.mjs`) — the fork's `bench-ts-only`, the common file set every formatter including tsv supports
+- **Corpora are not pinned**: the three cloned repos are shallow-cloned at their
+  default-branch HEAD, so the corpus drifts over time and runs taken months apart
+  are not strictly comparable (`parser.ts` is pinned to v5.9.2)
 - **Methodology**:
   - Multiple warmup runs before measurement
   - Multiple benchmark runs for statistical accuracy
   - Git reset before each run to ensure identical starting conditions
   - Memory usage measured using GNU time (peak RSS)
   - Local binaries via `./node_modules/.bin/`
+
+## How to read these numbers
+
+This suite measures the **whole CLI** — process spawn, file discovery, I/O, and
+whatever parallelism each tool does by default. That is what a user experiences
+typing the command, and it is the intended measure. It is **not** a formatter
+engine comparison, and the headline ratios should not be read as one.
+
+**The ratios depend on the machine.** The harness never caps threads, so each
+formatter runs at its own default: biome, oxfmt, and tsv parallelize across files,
+while prettier is effectively serial. The multiplier between a parallel tool and a
+serial one therefore scales with core count — the same oxfmt-vs-biome comparison
+measures ~3.5x on a 4-core CI runner and ~1.7x on a 12-thread laptop. Neither is
+wrong; they are answers to "on what hardware?". The machine for the numbers below
+is recorded under [Versions](#versions), and every row must come from one machine
+to be comparable.
+
+**Separating the engine from the thread count.** hyperfine prints `[User: …]`
+next to each wall time. User time is total CPU across all threads, so `User ÷ wall`
+is roughly how many cores a tool kept busy, and comparing _User_ times is the
+parallelism-neutral view. A tool that is 100x faster in wall-clock may be ~25x
+faster per unit of CPU work, with the rest coming from using cores its competitor
+left idle. Both numbers are real; they answer different questions.
+
+Two caveats on that:
+
+- **User time is only a clean engine proxy when threads are doing real work.** In
+  `bench-large-single-file` there is one file to format, yet oxfmt still reports
+  more User than wall time — it spins up a worker pool it cannot use. That
+  overhead inflates its User time without being formatting work, so the CPU-work
+  comparison in that scenario is not engine-vs-engine either. (tsv clamps its
+  worker count to the file count and biome likewise stays single-threaded there,
+  so this is specific to oxfmt.)
+- **No thread flags are passed.** oxfmt exposes `--threads` and tsv `--jobs`, but
+  biome exposes nothing equivalent, so a pinned single-thread comparison cannot
+  cover every formatter — and pinning would stop measuring what the suite is for.
+  Every tool runs at its default, deliberately.
+
+**Formatting width is not identical.** prettier, biome, and oxfmt format at width
+80 (oxfmt explicitly, the other two by default). tsv is non-configurable and always
+formats at width 100, so it cannot be aligned. Different widths mean different
+line-break decisions and different output volume — a real if small asymmetry with
+no fix available on tsv's side.
+
+**Errors are not penalized.** hyperfine runs with `--ignore-failure` and the memory
+pass swallows command errors, so a formatter that _rejects_ part of a corpus would
+still be timed — and look faster for the work it skipped. The two tsv scenarios run
+a preflight parse check first and report what each formatter rejects; both corpora
+are currently clean for all five.
 
 ## Versions
 

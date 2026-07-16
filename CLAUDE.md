@@ -125,8 +125,34 @@ each formatter runs at its own default — tsv, oxfmt, and biome parallelize acr
 files; prettier is effectively single-threaded. So on the multi-file scenarios
 the wall-clock comparison bakes in each tool's own parallelism (a User-time far
 above wall-time is the tell for the parallel ones), which is the intended
-real-world measure. `bench-large-single-file` is the controlled exception — one
-file means one thread for everyone, isolating raw single-file throughput.
+real-world measure. **No thread flags are passed, deliberately**: oxfmt has
+`--threads` and tsv has `--jobs`, but biome has no equivalent, so a pinned
+comparison could not cover every formatter — and pinning would stop measuring what
+this suite is for. Consequence to keep in mind: a ratio between a parallel tool and
+a serial one **scales with core count**, so a ratio is only meaningful alongside
+the machine (`update-readme` records it under `## Versions`; see the README's
+"How to read these numbers").
+
+Separating engine from thread count: comparing hyperfine's `[User: …]` times
+instead of wall times is the parallelism-neutral view — on `bench-ts-only` tsv is
+~4x oxfmt in wall-clock but ~2x in CPU work, the rest being cores oxfmt left idle.
+**But User time is only a clean engine proxy while threads do real work.**
+`bench-large-single-file` is _not_ the controlled single-thread exception it looks
+like: with one file to format, tsv clamps its worker count to the file count (User
+< wall, genuinely one thread) and biome likewise stays single-threaded, but **oxfmt
+still spins up a pool it cannot use** — it reports ~360ms User against ~220ms wall.
+That overhead inflates its User time without being formatting work, so neither the
+wall nor the CPU-work comparison in that scenario is engine-vs-engine.
+
+**Formatting width is not identical (unfixable):** prettier, biome, and oxfmt
+format at width 80 (oxfmt explicitly via `printWidth`, prettier and biome by
+default); tsv is non-configurable and always formats at width 100. Different widths
+mean different break decisions and different output volume. tsv cannot be aligned
+down to 80 — that's the whole point of its design — and aligning the other three
+_up_ to 100 would take them off their defaults, which is its own distortion and a
+bigger deviation from upstream's intent. So it stands as a documented asymmetry
+rather than something to fix. (`bench-ts-only` is fork-added and could be changed
+freely; `bench-large-single-file` is upstream's.)
 
 ## Running
 
