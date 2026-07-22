@@ -112,7 +112,7 @@ ${benchmarkResults}
   // so this still works against a README written before it existed.
   const versionsRegex =
     /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*tsv\*\*: .*(\n\n_Measured on: .*_)?/;
-  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **tsv**: ${versions.tsv}\n\n_Measured on: ${describeMachine()} — the ratios below depend on the core count; see [How to read these numbers](#how-to-read-these-numbers)._`;
+  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **tsv**: ${versions.tsv}\n\n_Measured on: ${describeMachine()} — the ratios below depend on the core count._`;
 
   if (versionsRegex.test(readmeContent)) {
     readmeContent = readmeContent.replace(versionsRegex, newVersionsContent);
