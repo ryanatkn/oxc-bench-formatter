@@ -194,6 +194,18 @@ on a `pnpm-lock.yaml` bump. Two reasons, both of which corrupt the results:
 So regenerate with `pnpm run update-readme` **locally**, where `../tsv` exists, and
 keep every row from one machine.
 
+**The README results block is a consumed interface.**
+[tsv.fuz.dev](https://tsv.fuz.dev/docs/benchmarks) renders these numbers on its
+benchmarks page, and since this suite publishes no JSON, its generator parses the
+README: the `<!-- BENCHMARK_RESULTS_START -->` / `END` markers, the
+`=====`-banner scenario headings, hyperfine's `Benchmark N:` / `Time (mean ± σ)` /
+`Range (min … max)` / `Summary` lines, the `Memory Usage:` rows, the preflight
+block, the `## Versions` list, and the `_Measured on: …_` line. Changing any of
+those shapes — or dropping a marker — fails that site's `gro gen` with a message
+naming the scenario and section that stopped parsing (a rename that still parses
+trips its tests instead). It fails loudly rather than quietly publishing stale
+numbers, but it does fail: pair a format change with a fix there.
+
 ## Adding a formatter or scenario
 
 - **New scenario**: create `bench-<name>/` (copy an existing one), add the dir
