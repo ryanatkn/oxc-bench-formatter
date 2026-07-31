@@ -78,6 +78,17 @@ else
 	echo "Outline repository for ts-only already exists"
 fi
 
+# Build the Svelte corpus for bench-svelte (tsv vs rsvelte-fmt, .svelte only).
+# Sibling checkouts (../kit, ../svelte.dev) plus cloned Svelte component
+# libraries (layerchart, svelte-ux, flowbite-svelte), snapshotted with fixtures
+# pruned into a git-init'd data/ tree — see bench-svelte/setup-corpus.mjs.
+if [ ! -d "bench-svelte/data" ]; then
+	echo "Building Svelte corpus for bench-svelte..."
+	node ./bench-svelte/setup-corpus.mjs
+else
+	echo "Svelte corpus for bench-svelte already exists"
+fi
+
 # Ensure the tsv native binary exists (built from the sibling tsv repo).
 TSV_BIN="${TSV_BIN:-../tsv/target/release/tsv}"
 if [ ! -x "$TSV_BIN" ]; then

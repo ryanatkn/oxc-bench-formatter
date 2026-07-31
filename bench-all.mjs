@@ -14,6 +14,7 @@ const scenarios = [
   "bench-mixed-embedded",
   "bench-full-features",
   "bench-ts-only",
+  "bench-svelte",
 ];
 
 async function runScenario(scenario) {
@@ -37,7 +38,8 @@ async function main() {
     !existsSync("bench-mixed-embedded/data") ||
     !existsSync("bench-full-features/data") ||
     !existsSync("bench-large-single-file/data/parser.ts") ||
-    !existsSync("bench-ts-only/data")
+    !existsSync("bench-ts-only/data") ||
+    !existsSync("bench-svelte/data")
   ) {
     console.log("Running setup...");
     execSync("./init.sh", { stdio: "inherit" });
@@ -54,7 +56,9 @@ async function main() {
   console.log("JavaScript/TypeScript Formatter Benchmark");
   console.log("=========================================");
   console.log("");
-  console.log("Formatters: Prettier, Biome, Oxfmt, tsv (.ts-only scenarios)");
+  console.log(
+    "Formatters: Prettier, Biome, Oxfmt, tsv (.ts-only + Svelte scenarios), rsvelte-fmt (Svelte scenario)",
+  );
   console.log("");
 
   for (const scenario of scenarios) {

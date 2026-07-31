@@ -19,6 +19,11 @@ export function createFormatters(projectRoot, configDir) {
   // Override with the TSV_BIN env var; the default resolves the release build
   // checked out next to this repo (../tsv relative to the project root).
   const tsvBin = process.env.TSV_BIN ?? `${projectRoot}/../tsv/target/release/tsv`;
+  // rsvelte-fmt (@rsvelte/fmt) is an npm bin wrapping a native binary: it
+  // formats .svelte in-process and delegates every other file to oxfmt. On the
+  // .svelte-only bench-svelte corpus that oxfmt leg spawns on zero files — the
+  // startup cost is part of its shipped directory posture, so it stays.
+  const rsvelteBin = `${projectRoot}/node_modules/.bin/rsvelte-fmt`;
 
   // NOTE: Do not use `--experimental-cli`, as it seems to behave differently than the stable CLI...
   return {
@@ -36,6 +41,11 @@ export function createFormatters(projectRoot, configDir) {
     // file is never discovered and JSX inside a .js file is a parse error.
     tsv: (files) => `${tsvBin} format ${files}`,
 
+    // Unlike tsv, rsvelte-fmt is configurable; the scenario's oxfmtrc.json pins
+    // it to tsv's fixed style (printWidth 100, tabs, single quotes, no trailing
+    // commas) so break decisions and output volume are comparable.
+    rsvelte: (files) => `${rsvelteBin} --config ${configDir}/oxfmtrc.json ${files}`,
+
     // Check-mode counterparts: identical scope and config, no writes. Preflight
     // reads their diagnostics to learn which files each formatter rejects.
     check: {
@@ -48,6 +58,8 @@ export function createFormatters(projectRoot, configDir) {
       oxfmt: (files) => `${oxfmtBin} --check --config ${configDir}/oxfmtrc.json ${files}`,
 
       tsv: (files) => `${tsvBin} format --check ${files}`,
+
+      rsvelte: (files) => `${rsvelteBin} --check --config ${configDir}/oxfmtrc.json ${files}`,
     },
   };
 }
@@ -64,6 +76,9 @@ const PREFLIGHT_MATCHERS = {
   biome: /^(.+?):\d+:\d+ parse /gm, // path:1:11 parse ━━━━━
   oxfmt: /,-\[(.+?):\d+:\d+\]/g, // miette snippet header
   tsv: /^error: (.+?): /gm, // error: path: message
+  // Anchored on the .svelte extension so summary lines ("rsvelte-fmt: would
+  // reformat N files") can never read as a rejected path.
+  "rsvelte-fmt": /^rsvelte-fmt: (.+?\.svelte): /gm, // rsvelte-fmt: path: rsvelte_formatter error: ...
 };
 
 /**
@@ -86,10 +101,12 @@ export async function runPreflight(checks, cwd = ".") {
   const failures = {};
   const excluded = new Set();
   const unavailable = [];
+  const crashed = [];
 
   for (const { name, command } of checks) {
     let output = "";
     let launchFailed = false;
+    let crashStatus = null;
     try {
       output = execSync(`${command} 2>&1`, { encoding: "utf8", stdio: "pipe", cwd });
     } catch (error) {
@@ -99,6 +116,11 @@ export async function runPreflight(checks, cwd = ".") {
       // binary (e.g. tsv on a CI runner that never built it) must read as
       // "unavailable", never be mistaken for "clean" for lack of a matcher hit.
       launchFailed = error.status === 126 || error.status === 127 || error.code === "ENOENT";
+      // 128+n is the conventional killed-by-signal encoding (a shell reports a
+      // SIGABRT child as 134; the rsvelte-fmt launcher propagates its native
+      // binary's signal the same way). A crash mid-check means the diagnostics
+      // are incomplete, so "no matcher hits" must not read as "clean".
+      crashStatus = typeof error.status === "number" && error.status >= 128 ? error.status : null;
       output = `${error.stdout ?? ""}${error.stderr ?? ""}`;
     }
 
@@ -106,6 +128,13 @@ export async function runPreflight(checks, cwd = ".") {
       failures[name] = [];
       unavailable.push(name);
       console.log(`  ${name}: unavailable (command failed to launch)`);
+      continue;
+    }
+
+    if (crashStatus !== null) {
+      failures[name] = [];
+      crashed.push(name);
+      console.log(`  ${name}: CRASHED during check (exit ${crashStatus})`);
       continue;
     }
 
@@ -123,13 +152,18 @@ export async function runPreflight(checks, cwd = ".") {
   for (const name of unavailable) {
     console.log(`  → ${name} could not run — its benchmark row below is meaningless, not a pass`);
   }
-  if (excluded.size === 0 && unavailable.length === 0) {
+  for (const name of crashed) {
+    console.log(
+      `  → ${name} crashed partway through its check — its coverage is unknown and its timed runs may crash too`,
+    );
+  }
+  if (excluded.size === 0 && unavailable.length === 0 && crashed.length === 0) {
     console.log("  → all formatters accept the whole corpus; nothing excluded");
   } else if (excluded.size > 0) {
     console.log(`  → excluding ${excluded.size} file(s) rejected by at least one formatter`);
   }
 
-  return { failures, excluded: [...excluded], unavailable };
+  return { failures, excluded: [...excluded], unavailable, crashed };
 }
 
 // ---

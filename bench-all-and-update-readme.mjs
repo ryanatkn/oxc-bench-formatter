@@ -50,10 +50,11 @@ function extractBenchmarkResults(output) {
 async function getVersions() {
   console.log("Fetching versions...");
   try {
-    const [prettier, biome, oxfmt] = await Promise.all([
+    const [prettier, biome, oxfmt, rsvelte] = await Promise.all([
       execAsync("vp exec prettier --version"),
       execAsync("vp exec biome --version"),
       execAsync("vp exec oxfmt --version"),
+      execAsync("vp exec rsvelte-fmt --version"),
     ]);
 
     // tsv is a native binary, not an npm package — read its version from the
@@ -72,6 +73,7 @@ async function getVersions() {
       prettier: prettier.stdout.trim(),
       biome: biome.stdout.trim().replace("Version: ", ""),
       oxfmt: oxfmt.stdout.trim().replace("Version: ", ""),
+      rsvelte: rsvelte.stdout.trim().replace("rsvelte_fmt ", ""),
       tsv,
     };
   } catch (error) {
@@ -111,8 +113,8 @@ ${benchmarkResults}
   // Update versions section. The trailing machine line is optional in the match
   // so this still works against a README written before it existed.
   const versionsRegex =
-    /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*tsv\*\*: .*(\n\n_Measured on: .*_)?/;
-  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **tsv**: ${versions.tsv}\n\n_Measured on: ${describeMachine()} — the ratios below depend on the core count._`;
+    /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*rsvelte-fmt\*\*: .*\n- \*\*tsv\*\*: .*(\n\n_Measured on: .*_)?/;
+  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **rsvelte-fmt**: ${versions.rsvelte}\n- **tsv**: ${versions.tsv}\n\n_Measured on: ${describeMachine()} — the ratios below depend on the core count._`;
 
   if (versionsRegex.test(readmeContent)) {
     readmeContent = readmeContent.replace(versionsRegex, newVersionsContent);

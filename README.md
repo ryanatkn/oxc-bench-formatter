@@ -4,7 +4,7 @@ This is a fork of [oxc-project/bench-formatter](https://github.com/oxc-project/b
 with [tsv](https://github.com/fuzdev/tsv) added.
 Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfmt** with **tsv**.
 
-> **About this fork:** adds [tsv](https://tsv.fuz.dev) (native-Rust JS/TS, CSS, and Svelte formatter) to the comparison. tsv has no JSX/TSX parser, so it runs only in the JSX-free scenarios — `bench-large-single-file` (`parser.ts`) and `bench-ts-only`, a fork-added scenario benching Outline's non-JSX subset (`.ts`/`.js`/`.mjs`) with every formatter scoped to that same set. The upstream scenarios are unchanged. tsv is a native binary built from a sibling `../tsv` checkout (or `TSV_BIN`), not an npm package. The ratios are machine-dependent and measure the CLI, not the engine; see [Formatters](#formatters) and [CLAUDE.md](CLAUDE.md) for the full methodology.
+> **About this fork:** adds [tsv](https://tsv.fuz.dev) (native-Rust JS/TS, CSS, and Svelte formatter) to the comparison. tsv has no JSX/TSX parser, so it runs only in the JSX-free scenarios — `bench-large-single-file` (`parser.ts`) and `bench-ts-only`, a fork-added scenario benching Outline's non-JSX subset (`.ts`/`.js`/`.mjs`) with every formatter scoped to that same set. A third fork-added scenario, `bench-svelte`, benches tsv against [rsvelte-fmt](https://github.com/baseballyama/rsvelte) (`@rsvelte/fmt`) head-to-head on ~2,300 third-party `.svelte` files (SvelteKit, svelte.dev, layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake), with rsvelte-fmt configured to tsv's fixed style (width 100, tabs, single quotes) so output volume is comparable. The upstream scenarios are unchanged. tsv is a native binary built from a sibling `../tsv` checkout (or `TSV_BIN`), not an npm package. The ratios are machine-dependent and measure the CLI, not the engine; see [Formatters](#formatters) and [CLAUDE.md](CLAUDE.md) for the full methodology.
 
 ## Formatters
 
@@ -12,6 +12,7 @@ Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfm
 - [Prettier](https://prettier.io/) + @prettier/plugin-oxc
 - [Biome](https://biomejs.dev/) Formatter
 - [Oxfmt](https://oxc.rs)
+- [rsvelte-fmt](https://github.com/baseballyama/rsvelte) (`@rsvelte/fmt`, Svelte scenario only)
 - [tsv](https://tsv.fuz.dev/)
 
 ## Run
@@ -55,6 +56,7 @@ node ./bench-full-features/bench.mjs
 - **Prettier**: 3.9.5
 - **Biome**: 2.5.4
 - **Oxfmt**: 0.60.0
+- **rsvelte-fmt**: 0.7.4
 - **tsv**: 0.1.0
 
 _Measured on: AMD Ryzen 5 PRO 7530U with Radeon Graphics · 12 threads · linux x64 — the ratios below depend on the core count._

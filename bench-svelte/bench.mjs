@@ -1,0 +1,87 @@
+#!/usr/bin/env node
+
+import {
+  checkGnuTime,
+  createFormatters,
+  printHeader,
+  runHyperfine,
+  runMemoryBenchmarks,
+  runPreflight,
+  setupCwd,
+} from "../shared/utils.mjs";
+
+// Overridable for quick smoke runs (fewer runs, less accuracy), e.g.
+// BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-svelte/bench.mjs
+const WARMUP_RUNS = Number(process.env.BENCH_WARMUP ?? 2);
+const BENCHMARK_RUNS = Number(process.env.BENCH_RUNS ?? 5);
+
+async function main() {
+  setupCwd(import.meta.url);
+
+  const dataDir = "./data";
+  const formatters = createFormatters("..", ".");
+
+  printHeader("Benchmarking Svelte (tsv vs rsvelte-fmt)");
+
+  checkGnuTime();
+
+  console.log("");
+  console.log(
+    "Target: third-party .svelte corpus (kit, svelte.dev, layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake)",
+  );
+  console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
+  console.log("- Git reset before each run");
+  console.log("- .svelte only: the two Svelte-native formatters head-to-head");
+  console.log("");
+
+  const prepareCmd = `git -C ${dataDir} reset --hard`;
+
+  // Confirm both formatters accept the whole corpus before timing it. hyperfine
+  // runs with --ignore-failure, so a tool that rejects files would otherwise be
+  // timed on the ones it skipped and look faster for it.
+  await runPreflight([
+    { name: "tsv", command: formatters.check.tsv(dataDir) },
+    { name: "rsvelte-fmt", command: formatters.check.rsvelte(dataDir) },
+  ]);
+
+  // No --ignore-failure, unlike the other scenarios: both formatters exit 0 on
+  // a successful write run, so the only non-zero exits here are real errors or
+  // crashes (a nondeterministic SIGABRT has been observed in rsvelte-fmt
+  // 0.7.4), and a crashed partial run must fail the benchmark loudly rather
+  // than be timed as a fast pass.
+  await runHyperfine([
+    `--warmup=${WARMUP_RUNS}`,
+    `--runs=${BENCHMARK_RUNS}`,
+    "--prepare",
+    prepareCmd,
+    "--shell=bash",
+    "-n=tsv",
+    "-n=rsvelte-fmt",
+    formatters.tsv(dataDir),
+    formatters.rsvelte(dataDir),
+  ]);
+
+  await runMemoryBenchmarks(
+    [
+      {
+        name: "tsv",
+        command: formatters.tsv(dataDir),
+        prepare: prepareCmd,
+      },
+      {
+        name: "rsvelte-fmt",
+        command: formatters.rsvelte(dataDir),
+        prepare: prepareCmd,
+      },
+    ],
+    BENCHMARK_RUNS,
+  );
+
+  console.log("");
+  console.log("Svelte benchmark complete!");
+}
+
+main().catch((error) => {
+  console.error("Svelte benchmark failed:", error.message);
+  process.exit(1);
+});

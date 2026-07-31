@@ -16,7 +16,10 @@ A benchmark suite comparing JS/TS formatters on **execution time** (via
 - **oxfmt** (`oxfmt`)
 - **tsv** (`tsv format`) — native Rust, JS/TS family + CSS/Svelte, no JSX/TSX;
   runs only in the non-JSX scenarios (`bench-ts-only`,
-  `bench-large-single-file`). This is the fork's addition over upstream.
+  `bench-large-single-file`, `bench-svelte`). This is the fork's addition over upstream.
+- **rsvelte-fmt** (`rsvelte-fmt`) — `@rsvelte/fmt`, Rust Svelte formatter that
+  formats `.svelte` in-process and delegates other files to oxfmt; runs only in
+  `bench-svelte`, head-to-head with tsv. Also fork-added.
 
 This suite measures the whole **CLI** (process spawn + I/O + multi-file parallel
 batch + RSS). A complementary fork,
@@ -44,6 +47,7 @@ bench-formatter/
 ├── bench-mixed-embedded/
 ├── bench-full-features/
 ├── bench-ts-only/                   # non-JSX scenario added by this fork (all 5 formatters incl. tsv)
+├── bench-svelte/                    # Svelte scenario added by this fork (tsv vs rsvelte-fmt only)
 ├── vite.config.ts / pnpm-workspace.yaml  # vite-plus tooling + catalog
 └── .github/workflows/               # ci.yml, security, update-readme
 ```
@@ -61,6 +65,10 @@ bench-<name>/
 └── data/               # test corpus — gitignored; cloned or downloaded by init.sh
 ```
 
+`bench-svelte/` deviates from this shape: its only config is `oxfmtrc.json`
+(rsvelte-fmt's; tsv takes none), plus `setup-corpus.mjs` (builds `data/`) and a
+gitignored `repos/` clone cache — see "The rsvelte-fmt integration" below.
+
 ## The harness — `shared/utils.mjs`
 
 - **`createFormatters(projectRoot, configDir)`** → `{ prettier, biome, oxfmt, tsv }`
@@ -73,6 +81,10 @@ bench-<name>/
     binary, not an npm `.bin`. `tsvBin` is `TSV_BIN` or defaults to
     `<projectRoot>/../tsv/target/release/tsv`. No config file or flags (tsv is
     non-configurable); directory args recurse over `.ts`/`.svelte`/`.css` only.
+  - `rsvelte(files)` → `… --config <dir>/oxfmtrc.json <files>` — the
+    `@rsvelte/fmt` npm bin (a Node launcher that execs a platform-native binary
+    and points it at the project's oxfmt for non-`.svelte` files). Configurable,
+    unlike tsv; only `bench-svelte` uses it.
   - Note in the source: do **not** pass prettier `--experimental-cli` (it
     behaves differently from the stable CLI).
 - **`runHyperfine(args)`** — spawns `hyperfine` (stdio inherited), resolves on exit 0.
@@ -92,6 +104,7 @@ bench-<name>/
 | `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)             | `git reset --hard` + rm stray prettier configs                     | 1 × 3         | prettier+oxc, oxfmt      |
 | `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)      | `git reset --hard` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt      |
 | `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset (`.ts`/`.js`/`.mjs`) | `git reset --hard` (its own outline checkout)                      | 2 × 5         | all 5 (incl. tsv)        |
+| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section)     | `git reset --hard` (snapshot repo built by `setup-corpus.mjs`)     | 2 × 5         | tsv, rsvelte-fmt         |
 
 The two embedded/full-features scenarios deliberately drop plain-prettier and
 biome and bench only the prettier+oxc-parser vs oxfmt pair. File-type scoping is
@@ -106,13 +119,19 @@ formatter, including tsv, supports) so the comparison is apples-to-apples;
 same real-world repo minus the 682 `.tsx` files tsv cannot parse, which keeps the
 corpus third-party: no formatter here is measured on code it already shaped.
 
-**Methodology — preflight:** every scenario runs hyperfine with `--ignore-failure`
-(and the memory pass swallows command errors), so a formatter that _errors_
-partway would be timed rather than penalized — one that rejected much of the
-corpus could look artificially fast. The two tsv scenarios guard against this with
+**Methodology — preflight:** every scenario except `bench-svelte` runs hyperfine
+with `--ignore-failure` (and the memory pass swallows command errors), so a
+formatter that _errors_ partway would be timed rather than penalized — one that
+rejected much of the corpus could look artificially fast. (`bench-svelte` drops
+the flag: both of its formatters exit 0 on a successful write run, so any
+non-zero exit there is a real error or crash and aborts the benchmark loudly.)
+The fork-added scenarios guard against this with
 `runPreflight` (`shared/utils.mjs`), which runs each formatter's **check** command
 first, parses per-file parse errors out of its diagnostics (one matcher per tool —
-they share no error format), and reports what each rejects before any timing. The
+they share no error format), and reports what each rejects before any timing. It
+also flags a check command that fails to launch (exit 126/127) or crashes
+(exit ≥ 128, the killed-by-signal encoding) — either must read as "unknown
+coverage", never as clean. The
 asymmetry is real: tsv has no JSX parser, so JSX inside a `.js` file is a parse
 error for tsv and ordinary input for prettier, biome, and oxfmt. Outline's non-JSX
 subset is currently clean for all five, so preflight excludes nothing — it is a
@@ -121,8 +140,8 @@ formatter there is a JS-native tool that accepts the whole corpus, and a check p
 over storybook/continue would cost minutes for no signal.
 
 **Concurrency, when reading the numbers:** the harness never caps threads, so
-each formatter runs at its own default — tsv, oxfmt, and biome parallelize across
-files; prettier is effectively single-threaded. So on the multi-file scenarios
+each formatter runs at its own default — tsv, oxfmt, biome, and rsvelte-fmt
+parallelize across files; prettier is effectively single-threaded. So on the multi-file scenarios
 the wall-clock comparison bakes in each tool's own parallelism (a User-time far
 above wall-time is the tell for the parallel ones), which is the intended
 real-world measure. **No thread flags are passed, deliberately**: oxfmt has
@@ -152,7 +171,9 @@ down to 80 — that's the whole point of its design — and aligning the other t
 _up_ to 100 would take them off their defaults, which is its own distortion and a
 bigger deviation from upstream's intent. So it stands as a documented asymmetry
 rather than something to fix. (`bench-ts-only` is fork-added and could be changed
-freely; `bench-large-single-file` is upstream's.)
+freely; `bench-large-single-file` is upstream's.) `bench-svelte` is the one
+exception: rsvelte-fmt _is_ configurable, so its `oxfmtrc.json` pins it to tsv's
+fixed style and that head-to-head has no width asymmetry.
 
 ## Running
 
@@ -170,8 +191,8 @@ skipped.
 
 `update-readme` scrapes stdout from `vp run bench`, replaces the block between
 `<!-- BENCHMARK_RESULTS_START -->` / `<!-- BENCHMARK_RESULTS_END -->` in
-`README.md`, and refreshes the `## Versions` section. The prettier/biome/oxfmt
-versions come from `vp exec <bin> --version`; tsv's comes from
+`README.md`, and refreshes the `## Versions` section. The
+prettier/biome/oxfmt/rsvelte-fmt versions come from `vp exec <bin> --version`; tsv's comes from
 `[workspace.package]` in `../tsv/Cargo.toml` (it's a native binary, no npm
 version to query). CI (`.github/workflows/ci.yml`) runs `vp run bench` on push/PR
 as a smoke test.
@@ -183,7 +204,9 @@ on a `pnpm-lock.yaml` bump. Two reasons, both of which corrupt the results:
 - **CI has no tsv.** Neither workflow builds it, so the tsv legs of
   `bench-large-single-file` and `bench-ts-only` error out and the README silently
   loses them (per-scenario errors and hyperfine `--ignore-failure` are non-fatal,
-  so the run still "succeeds"). Nothing blocks teaching CI to build tsv now —
+  so the run still "succeeds"). CI also has no `../kit`/`../svelte.dev` sibling
+  checkouts, so the `bench-svelte` corpus can't build there and that whole
+  scenario errors non-fatally. Nothing blocks teaching CI to build tsv now —
   `github.com/fuzdev/tsv` is public and the corpus no longer needs the private fuz
   repos — it just isn't wired up.
 - **Core count changes the answer.** biome, oxfmt, and tsv scale with cores while
@@ -246,7 +269,8 @@ lives:
   TypeScript parser covers the whole JS family (`.js`/`.mjs`/`.cjs` format as
   TypeScript, a syntactic superset). What it has no parser for is JSX, so it runs
   only where the corpus is JSX-free: `bench-large-single-file` (single `.ts` file,
-  ideal as-is) and `bench-ts-only` (outline minus its 682 `.tsx` files). In those
+  ideal as-is), `bench-ts-only` (outline minus its 682 `.tsx` files), and
+  `bench-svelte` (a `.svelte`-only snapshot). In those
   scenarios every _other_ formatter is scoped to the same non-JSX subset so the
   head-to-head is apples-to-apples. The three embedded/JSX scenarios are left
   tsv-free. Note the asymmetry preflight exists to catch: JSX inside a `.js` file
@@ -322,11 +346,11 @@ The harness resolves tsv from `TSV_BIN`, falling back to
 
 ### Future tsv work (planned, not yet done)
 
-The current coverage is the JS/TS family. tsv also formats `.svelte` and `.css`,
-and those parsers are **not yet exercised** by any scenario (outline has neither).
+The current coverage is the JS/TS family plus Svelte (`bench-svelte`). tsv also
+formats `.css`, and that parser is **not yet exercised** by any scenario.
 Candidates:
 
-- A Svelte/CSS corpus so tsv's other two parsers get benchmarked.
+- A CSS corpus so tsv's CSS parser gets benchmarked.
 - tsv-scoped variants of the embedded scenarios (`bench-mixed-embedded`,
   `bench-full-features`) — i.e. narrowing those corpora to tsv's supported set
   rather than leaving tsv out of them entirely.
@@ -337,7 +361,10 @@ Candidates:
   outline/storybook/continue at their default-branch HEAD, unpinned, so the corpus
   drifts and a rerun months apart is not comparable — and outline is now cloned
   twice, which can land two different commits. `bench-large-single-file` already
-  pins (`v5.9.2`); the clones should too.
+  pins (`v5.9.2`); the clones should too. `bench-svelte`'s five library clones
+  and two sibling checkouts are likewise unpinned, though its snapshot at least
+  freezes the corpus between regenerations and records source commits in
+  `data/`'s commit message.
 - **A `--version` flag for tsv.** The README's tsv version is parsed out of
   `../tsv/Cargo.toml` because the binary cannot report it, which is why the
   copy-in path degrades to `unknown` and why CI would need the tsv source checked
@@ -347,3 +374,58 @@ When adding these, keep the apples-to-apples discipline: scope _every_ formatter
 in a tsv-inclusive run to the same file set (the three-way `prettierignore` /
 oxfmt `ignorePatterns` / biome `files.includes` scoping), and regenerate the
 README Results afterward.
+
+## The rsvelte-fmt integration (bench-svelte)
+
+[`@rsvelte/fmt`](https://github.com/baseballyama/rsvelte) is the second
+fork-added formatter: a Rust Svelte formatter (rsvelte parser; `oxc_formatter`
+for `<script>`, `oxc_formatter_css` for `<style>`, both in-process) that runs
+only in `bench-svelte`, head-to-head with tsv — the two Svelte-native
+formatters, on `.svelte` files only.
+
+- **Binary**: the `rsvelte-fmt` npm bin — a Node launcher that resolves the
+  platform-native binary plus the project's oxfmt and execs it. Every timed run
+  therefore includes one Node cold start, and the memory row measures the whole
+  process tree (launcher + native binary + oxfmt leg) — its shipped CLI
+  posture, same as measuring prettier's Node. On this `.svelte`-only corpus the
+  oxfmt delegation leg spawns on zero files (and prints a "No config found"
+  notice — the directory hand-off doesn't forward `--config`); that overhead is
+  part of how `rsvelte-fmt <dir>` ships, so it deliberately stays.
+- **Config parity**: rsvelte-fmt is configurable where tsv is not, so
+  `bench-svelte/oxfmtrc.json` pins it to tsv's fixed style — `printWidth: 100`,
+  `useTabs`, `singleQuote`, `trailingComma: "none"` — making break decisions
+  and output volume comparable (see the width-asymmetry note above; this is the
+  one scenario without it).
+- **The corpus** (`setup-corpus.mjs`): a `.svelte`-only snapshot of seven
+  third-party sources. Sibling checkouts `../kit` (`packages/kit/src`) and
+  `../svelte.dev` (`apps/svelte.dev/src` + `packages/repl/src` +
+  `packages/site-kit/src`) — the same trees tsv's own bench corpus uses
+  (`../svelte` is absent on purpose: `packages/svelte/src` is the compiler,
+  zero `.svelte` files). Plus shallow clones, cached in the gitignored
+  `bench-svelte/repos/`, of five Svelte libraries: layerchart, svelte-ux,
+  flowbite-svelte, svelte-maplibre, layercake. Fixture pruning mirrors tsv's
+  perf-view corpus rules (`fixtures` segments anywhere, `samples` under a
+  `test` segment, hidden dirs). ~2,230 files / ~3.9MB, all third-party and
+  prettier-shaped — neither benched formatter is measured on code it already
+  shaped, and both would rewrite ~92% of the files, so write volume is
+  symmetric too.
+- **Why a snapshot, and why `git init`**: the two tools discover files
+  differently (tsv is config-free and gitignore-aware; rsvelte-fmt walks
+  `.svelte` itself and hands the rest of a directory to oxfmt, which would pick
+  up `.json`/`.md`/etc), so a tree containing only the corpus files is the one
+  way to pin both to the same set — verified: both self-report 2230. The
+  `git init` makes `data/` its own git root (sidestepping the outer
+  `.gitignore` trap described above) and provides the reset-per-run baseline;
+  provenance (per-source commit + file count) is recorded in the snapshot's
+  commit message. Regenerate with
+  `rm -rf bench-svelte/data && node ./bench-svelte/setup-corpus.mjs`.
+- **No `--ignore-failure`** (alone among the scenarios): both formatters exit 0
+  on a successful write run, so any non-zero exit here is a real error — and
+  rsvelte-fmt 0.7.4 has shown a rare nondeterministic SIGABRT (its launcher
+  propagates signal deaths as exit 128+n, e.g. 134), which must abort the
+  benchmark rather than be timed as a fast partial run. `runPreflight` flags
+  crashed check passes the same way.
+- **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-svelte/bench.mjs`
+  overrides the 2 × 5 defaults for a fast, low-accuracy smoke run.
+- **Version**: `vp exec rsvelte-fmt --version` in
+  `bench-all-and-update-readme.mjs` (it has a real `--version`, unlike tsv).
