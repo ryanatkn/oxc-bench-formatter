@@ -405,7 +405,7 @@ formatters, on `.svelte` files only.
   `bench-svelte/repos/`, of five Svelte libraries: layerchart, svelte-ux,
   flowbite-svelte, svelte-maplibre, layercake. Fixture pruning mirrors tsv's
   perf-view corpus rules (`fixtures` segments anywhere, `samples` under a
-  `test` segment, hidden dirs). ~2,230 files / ~3.9MB, all third-party and
+  `test` segment, hidden dirs). ~2,230 files / ~4.1MB, all third-party and
   prettier-shaped — neither benched formatter is measured on code it already
   shaped, and both would rewrite ~92% of the files, so write volume is
   symmetric too.
