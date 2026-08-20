@@ -31,6 +31,24 @@ async function runScenario(scenario) {
   });
 }
 
+// The scenarios' preflight guard is only as good as its diagnostic matchers, and
+// a matcher that stopped matching reports every corpus as clean. Verify them
+// against fixtures first: unlike a scenario failure, this one is fatal, since it
+// would let every scenario below publish numbers behind a guard that isn't
+// guarding. Runs in its own process so its chdir can't leak into the scenarios.
+async function runPreflightSelfTest() {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("node", [`${__dirname}/preflight-selftest.mjs`], { stdio: "inherit" });
+    proc.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`preflight self-test failed with code ${code}`));
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
 async function main() {
   // Run setup if needed
   if (
@@ -59,6 +77,9 @@ async function main() {
   console.log(
     "Formatters: Prettier, Biome, Oxfmt, tsv (.ts-only + Svelte scenarios), rsvelte-fmt (Svelte scenario)",
   );
+  console.log("");
+
+  await runPreflightSelfTest();
   console.log("");
 
   for (const scenario of scenarios) {

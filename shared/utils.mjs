@@ -96,6 +96,24 @@ const PREFLIGHT_MATCHERS = {
   "rsvelte-fmt": /^rsvelte-fmt: (.+?\.svelte): /gm, // rsvelte-fmt: path: rsvelte_formatter error: ...
 };
 
+// Patterns saying "this tool reported an error" without naming a file. A check
+// command can fail at the command level rather than per file — an unresolvable
+// plugin, a bad config, a path that matched nothing — and every such failure
+// leaves the matcher above with nothing to capture, so the formatter reads as
+// clean and is then timed doing no work at all. With `--ignore-failure` that
+// posts as an extraordinary speed.
+//
+// Only tools whose error prefix is unambiguous in check mode are listed. biome
+// calls formatting diffs "errors" and oxfmt's failure text names no file, so
+// neither has a signal that couldn't fire on an ordinary run — a command-level
+// failure in those two still reads as clean. `preflight-selftest.mjs` records
+// exactly which formatters are covered.
+const PREFLIGHT_ERROR_SIGNALS = {
+  prettier: /^\[error\] /m,
+  "prettier+oxc-parser": /^\[error\] /m,
+  tsv: /^error: /m,
+};
+
 /**
  * Confirm every formatter accepts the whole corpus before any of them is timed,
  * and abort the scenario if one does not.
@@ -113,22 +131,28 @@ const PREFLIGHT_MATCHERS = {
  * longer matches its own description. A corpus one formatter can't take is a
  * corpus to fix, not to quietly shrink.
  *
- * Returns `{failures, excluded, unavailable, crashed, unmatched}` on a clean
- * pass. Reports everything it found before throwing; never silently drops
- * anything.
+ * Returns `{failures, excluded, unavailable, crashed, unmatched, errored}` on a
+ * clean pass. Reports everything it found before throwing; never silently drops
+ * anything. `quiet` suppresses that reporting and is meant for
+ * `preflight-selftest.mjs`, which drives this function many times over fixtures
+ * and prints its own summary; the thrown error carries the same report as
+ * `error.report` either way.
  *
  * @throws if any formatter rejects a file, fails to launch, crashes mid-check,
- * or has no diagnostic matcher to read
+ * errors without naming a file, or has no diagnostic matcher to read
  */
-export async function runPreflight(checks) {
-  console.log("");
-  console.log("Preflight (per-formatter parse check):");
+export async function runPreflight(checks, { quiet = false } = {}) {
+  const log = quiet ? () => {} : console.log;
+
+  log("");
+  log("Preflight (per-formatter parse check):");
 
   const failures = {};
   const excluded = new Set();
   const unavailable = [];
   const crashed = [];
   const unmatched = [];
+  const errored = [];
 
   for (const { name, command } of checks) {
     let output = "";
@@ -154,14 +178,14 @@ export async function runPreflight(checks) {
     if (launchFailed) {
       failures[name] = [];
       unavailable.push(name);
-      console.log(`  ${name}: unavailable (command failed to launch)`);
+      log(`  ${name}: unavailable (command failed to launch)`);
       continue;
     }
 
     if (crashStatus !== null) {
       failures[name] = [];
       crashed.push(name);
-      console.log(`  ${name}: CRASHED during check (exit ${crashStatus})`);
+      log(`  ${name}: CRASHED during check (exit ${crashStatus})`);
       continue;
     }
 
@@ -173,7 +197,7 @@ export async function runPreflight(checks) {
       // without a matcher fails here rather than passing by default.
       failures[name] = [];
       unmatched.push(name);
-      console.log(`  ${name}: UNKNOWN — no diagnostic matcher, coverage unverified`);
+      log(`  ${name}: UNKNOWN — no diagnostic matcher, coverage unverified`);
       continue;
     }
 
@@ -185,23 +209,32 @@ export async function runPreflight(checks) {
     failures[name] = unique;
     for (const p of unique) excluded.add(p);
 
-    console.log(`  ${name}: ${unique.length === 0 ? "clean" : `${unique.length} rejected`}`);
-    for (const p of unique.slice(0, 5)) console.log(`      ${p}`);
-    if (unique.length > 5) console.log(`      … and ${unique.length - 5} more`);
+    if (unique.length === 0 && PREFLIGHT_ERROR_SIGNALS[name]?.test(output)) {
+      errored.push(name);
+      log(`  ${name}: ERRORED — reported an error it attributed to no file`);
+      continue;
+    }
+
+    log(`  ${name}: ${unique.length === 0 ? "clean" : `${unique.length} rejected`}`);
+    for (const p of unique.slice(0, 5)) log(`      ${p}`);
+    if (unique.length > 5) log(`      … and ${unique.length - 5} more`);
   }
 
   for (const name of unavailable) {
-    console.log(
-      `  → ${name} could not run — a benchmark row for it would be meaningless, not a pass`,
-    );
+    log(`  → ${name} could not run — a benchmark row for it would be meaningless, not a pass`);
   }
   for (const name of crashed) {
-    console.log(
+    log(
       `  → ${name} crashed partway through its check — its coverage is unknown and its timed runs may crash too`,
     );
   }
   for (const name of unmatched) {
-    console.log(`  → ${name} has no matcher in PREFLIGHT_MATCHERS — add one before benching it`);
+    log(`  → ${name} has no matcher in PREFLIGHT_MATCHERS — add one before benching it`);
+  }
+  for (const name of errored) {
+    log(
+      `  → ${name} failed at the command level, not on a file — check its config, plugins, and paths`,
+    );
   }
 
   const problems = [];
@@ -211,16 +244,21 @@ export async function runPreflight(checks) {
   if (unavailable.length > 0) problems.push(`unavailable: ${unavailable.join(", ")}`);
   if (crashed.length > 0) problems.push(`crashed: ${crashed.join(", ")}`);
   if (unmatched.length > 0) problems.push(`no diagnostic matcher: ${unmatched.join(", ")}`);
+  if (errored.length > 0) problems.push(`errored without naming a file: ${errored.join(", ")}`);
+
+  const report = { failures, excluded: [...excluded], unavailable, crashed, unmatched, errored };
 
   if (problems.length > 0) {
     // Abort rather than time a comparison that is no longer apples-to-apples.
-    console.log("  → aborting: this scenario would not measure every formatter on the same work");
-    throw new Error(`preflight failed — ${problems.join("; ")}`);
+    log("  → aborting: this scenario would not measure every formatter on the same work");
+    // The report rides along so a caller that catches (the self-test) can see
+    // which formatter failed and how, not just the summary line.
+    throw Object.assign(new Error(`preflight failed — ${problems.join("; ")}`), { report });
   }
 
-  console.log("  → all formatters accept the whole corpus; nothing excluded");
+  log("  → all formatters accept the whole corpus; nothing excluded");
 
-  return { failures, excluded: [...excluded], unavailable, crashed, unmatched };
+  return report;
 }
 
 // ---

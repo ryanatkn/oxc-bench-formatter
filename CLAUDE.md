@@ -41,6 +41,7 @@ bench-formatter/
 ├── bench-all.mjs                    # run every scenario in sequence (`pnpm run bench`)
 ├── bench-all-and-update-readme.mjs  # run + scrape output into README (`pnpm run update-readme`)
 ├── init.sh                          # install deps, clone data repos, download parser.ts, build tsv
+├── preflight-selftest.mjs           # verify preflight's matchers still read each tool's diagnostics
 ├── shared/utils.mjs                 # the harness: formatter commands + hyperfine + memory
 ├── bench-large-single-file/         # one scenario per dir (structure below)
 ├── bench-js-no-embedded/
@@ -130,8 +131,14 @@ The three tsv-inclusive scenarios guard against this with
 first, parses per-file parse errors out of its diagnostics (one matcher per tool —
 they share no error format), and reports what each rejects before any timing. It
 also flags a check command that fails to launch (exit 126/127), crashes
-(exit ≥ 128, the killed-by-signal encoding), or has no matcher to read — each must
-read as "unknown coverage", never as clean.
+(exit ≥ 128, the killed-by-signal encoding), has no matcher to read, or reports an
+error it attributes to no file — each must read as "unknown coverage", never as
+clean. That last one is the plugin-and-config case: prettier with an unresolvable
+plugin, or any tool handed a path that matched nothing, exits non-zero having
+formatted nothing, and would then be timed doing no work at all. Only prettier,
+prettier+oxc-parser, and tsv are covered (`PREFLIGHT_ERROR_SIGNALS`) — biome calls
+formatting diffs "errors" and oxfmt's failure text names no file, so neither has a
+signal that couldn't fire on an ordinary run.
 
 **Any of those aborts the scenario** (`runPreflight` throws; `bench-all.mjs` logs
 it and moves to the next scenario). It deliberately does _not_ filter the rejected
@@ -150,14 +157,30 @@ ever aborted — it is a guard, not an active filter. The three tsv-free scenari
 have no preflight; every formatter there is a JS-native tool that accepts the whole
 corpus, and a check pass over storybook/continue would cost minutes for no signal.
 
-Matchers are the guard's weak point: they read tool-specific diagnostic text, so a
-formatter that changes its error format goes quiet rather than loud. Two things
-push back — an unrecognized formatter name aborts instead of reporting clean, and
-every matcher that isn't already unique to a diagnostic line anchors its capture on
-a source-file extension (prettier echoes the offending source lines under the same
-`[error] ` prefix, so an unanchored capture reads `[error]   1 | const o = { a: 1 }`
-as a rejected file). Re-check the matchers against a deliberately broken file after
-a formatter upgrade.
+**Matchers are the guard's weak point**, and `preflight-selftest.mjs` is what
+guards them: they read tool-specific diagnostic text, so a formatter that changes
+its error format goes quiet rather than loud — preflight reports every corpus clean
+and nothing about the run looks wrong. The self-test generates fixtures into a temp
+directory (nothing broken is committed, so `vp check` never sees them) and drives
+the real `runPreflight` over each formatter three ways: a file it must reject, a
+valid-but-unformatted file containing `key: value` text it must accept, and — for
+the tools with an error signal — a path that doesn't exist, which must not read as
+clean. A missing binary is a skip with a notice, not a failure, so CI verifies the
+matchers it can reach. `bench-all.mjs` runs it before any scenario and treats
+failure as fatal; run it alone with `pnpm run preflight-selftest` after upgrading a
+formatter. Its output sits above the first `Benchmarking` banner, so the README
+scrape never picks it up.
+
+Two design details it locks in. Matchers whose prefix isn't already unique to a
+diagnostic line anchor their capture on a source-file extension — prettier echoes
+the offending source lines under the same `[error] ` prefix, so an unanchored
+capture reads `[error]   1 | const o = { a: 1 }` as a rejected file. And an
+unrecognized formatter name aborts rather than reporting clean.
+
+A fixture note worth keeping: JSX in a `.ts` file is **not** a universal parse
+error. prettier's default parser, biome, oxfmt, and tsv all reject it, but
+`@prettier/plugin-oxc` parses it and calls the file already formatted — so the
+self-test uses a plain syntax error instead.
 
 **Concurrency, when reading the numbers:** the harness never caps threads, so
 each formatter runs at its own default — tsv, oxfmt, biome, and rsvelte-fmt
@@ -384,10 +407,11 @@ Candidates:
 - Preflight for the three tsv-free scenarios. It only guards the three tsv-inclusive
   ones today; the `--ignore-failure` caveat applies everywhere, it just
   has no known bite where every formatter is a JS-native tool.
-- A matcher self-test — run each formatter's check command over a fixture with a
-  deliberate syntax error and assert its matcher fires. Today an upstream change to
-  any tool's diagnostic format silently turns preflight into a no-op for that tool,
-  and only a manual re-check catches it.
+- Command-level error signals for biome and oxfmt. `PREFLIGHT_ERROR_SIGNALS` covers
+  prettier and tsv; the other two have no error prefix that couldn't fire on an
+  ordinary check run, so a failure that formats nothing still reads as clean there.
+  A file-count assertion ("the tool reported looking at ≥ 1 files") would cover all
+  of them, at the cost of another per-tool matcher to keep alive.
 - **Pin the cloned corpora.** `init.sh` and both workflows clone
   outline/storybook/continue at their default-branch HEAD, unpinned, so the corpus
   drifts and a rerun months apart is not comparable — and outline is now cloned

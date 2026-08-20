@@ -6,6 +6,7 @@
   "scripts": {
     "update-readme": "node bench-all-and-update-readme.mjs",
     "bench": "node bench-all.mjs",
+    "preflight-selftest": "node preflight-selftest.mjs",
     "prepare": "vp config"
   },
   "devDependencies": {
