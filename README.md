@@ -60,7 +60,9 @@ node ./bench-svelte/bench.mjs
   - Memory usage measured using GNU time (peak RSS)
   - Local binaries via `./node_modules/.bin/`; tsv is a native binary from `../tsv/target/release/tsv` (or `TSV_BIN`)
   - The tsv scenarios run a preflight parse check first — if any formatter rejects a file, that scenario aborts instead of timing a comparison the tools didn't run on the same work
-  - A self-test (`pnpm run preflight-selftest`, also run before the suite) verifies that check can still read each formatter's diagnostics, so the guard can't silently become a no-op after an upgrade
+  - That preflight also cross-checks scope: every formatter reporting a file count must report the same one, and every formatter must have at least one file to change — a mis-scoped tool that formats nothing would otherwise post an unbeatable time
+  - A self-test (`pnpm run preflight-selftest`, also run before the suite) verifies that check can still read each formatter's diagnostics and counts, so the guard can't silently become a no-op after an upgrade
+  - Each scenario prints the corpus commit (or the file's content hash) it ran against, since the cloned corpora track their upstream default branches
 
 ## Versions
 

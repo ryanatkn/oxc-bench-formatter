@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
+import { execSync } from "child_process";
+
 import {
   checkGnuTime,
   createFormatters,
+  describeCorpus,
   printHeader,
   runHyperfine,
   runMemoryBenchmarks,
@@ -24,13 +27,19 @@ async function main() {
 
   checkGnuTime();
 
+  const prepareCmd = `cp ${dataFileBak} ${dataFile}`;
+
+  // Restore before the preflight below, not just between timed runs: its parse
+  // check and file counts have to describe the corpus that gets benchmarked, not
+  // whatever the previous run left formatted.
+  execSync(prepareCmd, { stdio: "ignore" });
+
   console.log("");
   console.log("Target: TypeScript compiler parser.ts (~540KB)");
+  console.log(`Corpus: ${describeCorpus(dataFile)}`);
   console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
   console.log("- Copy original before each run");
   console.log("");
-
-  const prepareCmd = `cp ${dataFileBak} ${dataFile}`;
 
   // Confirm every formatter accepts the corpus before timing it, and abort the
   // scenario if one doesn't. hyperfine runs with --ignore-failure, so a tool that

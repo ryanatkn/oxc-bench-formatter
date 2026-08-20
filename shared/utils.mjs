@@ -1,4 +1,6 @@
 import { execSync, spawn } from "child_process";
+import { createHash } from "crypto";
+import { existsSync, readFileSync, statSync } from "fs";
 import { dirname, relative, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -64,6 +66,83 @@ export function createFormatters(projectRoot, configDir) {
   };
 }
 
+/**
+ * Where a corpus came from, printed with each scenario's target.
+ *
+ * The cloned corpora track their upstream default branches, so the same scenario
+ * run months apart can be a different repository — a difference that otherwise
+ * leaves no trace in the published numbers. A commit and date (or, for the single
+ * downloaded file, its size and content hash) makes a rerun comparable, or
+ * visibly not.
+ */
+export function describeCorpus(target) {
+  try {
+    if (statSync(target).isDirectory()) {
+      if (!existsSync(`${target}/.git`)) {
+        // Also worth saying out loud: a corpus directory that isn't its own git
+        // root is the state in which tsv's discovery reads the OUTER repo's
+        // .gitignore, which ignores bench-*/data/, and finds nothing.
+        return "not a git checkout — provenance unknown";
+      }
+      return execSync(`git -C ${target} log -1 --format='%h %cd' --date=short`, {
+        encoding: "utf8",
+      }).trim();
+    }
+    const digest = createHash("sha256").update(readFileSync(target)).digest("hex");
+    return `${statSync(target).size} bytes, sha256:${digest.slice(0, 12)}`;
+  } catch (error) {
+    return `unknown (${error.message})`;
+  }
+}
+
+/**
+ * Assert a scenario's three scoping files name the same extensions.
+ *
+ * `prettierignore`, oxfmt's `ignorePatterns`, and biome's `files.includes` each
+ * express the same intent in a different dialect, and nothing links them: add an
+ * extension to one and the scenario quietly benches that formatter on more files
+ * than the others. Preflight's file-count comparison catches this too, but only
+ * once a corpus actually contains the extension — this catches it at edit time,
+ * with no corpus and no tool runs.
+ *
+ * Only for the allowlist shape this fork writes (`!*.ts`, `**\/*.ts`). Upstream's
+ * scenarios use bare `!*ts` patterns, which also match `.mts` and any file ending
+ * in "ts", so they are deliberately not checked here.
+ *
+ * @throws if the three disagree, or any of them allows nothing
+ */
+export function assertScopeConfigsAgree(configDir) {
+  const read = (file) => readFileSync(`${configDir}/${file}`, "utf8");
+  const collect = (patterns, shape) =>
+    new Set(patterns.flatMap((p) => (shape.exec(p)?.[1] ? [shape.exec(p)[1]] : [])));
+
+  const sets = {
+    prettierignore: collect(read("prettierignore").split("\n"), /^!\*(\.\w+)$/),
+    "oxfmtrc.json": collect(JSON.parse(read("oxfmtrc.json")).ignorePatterns ?? [], /^!\*(\.\w+)$/),
+    "biome.json": collect(
+      JSON.parse(read("biome.json")).files?.includes ?? [],
+      /^\*\*\/\*(\.\w+)$/,
+    ),
+  };
+
+  const describe = (set) => [...set].sort((a, b) => a.localeCompare(b)).join(" ") || "(nothing)";
+  const [reference, ...others] = Object.values(sets);
+  const agree = others.every(
+    (set) => set.size === reference.size && [...set].every((ext) => reference.has(ext)),
+  );
+
+  if (reference.size === 0 || !agree) {
+    const detail = Object.entries(sets)
+      .map(([file, set]) => `${file}: ${describe(set)}`)
+      .join("\n    ");
+    throw new Error(
+      `scope configs disagree — the formatters would not be scoped to the same files\n    ${detail}`,
+    );
+  }
+
+  console.log(`Scope configs agree: ${describe(reference)}`);
+}
+
 // ---
 
 // Per-formatter check-mode commands and the patterns that pull a failing file
@@ -108,6 +187,70 @@ const PREFLIGHT_MATCHERS = {
 // neither has a signal that couldn't fire on an ordinary run — a command-level
 // failure in those two still reads as clean. `preflight-selftest.mjs` records
 // exactly which formatters are covered.
+// How each tool reports the size of the job it just did.
+//
+// `considered` is how many files it looked at. Those numbers must agree: the
+// formatters are scoped by three unrelated mechanisms (`prettierignore`, oxfmt
+// `ignorePatterns`, biome `files.includes`) plus tsv's own extension walk, so a
+// corpus that grows a new file type — or an allowlist edited in one place and not
+// the others — silently benches different tools on different work. Checking the
+// counts against each other turns that into an abort. prettier reports no such
+// count, so it sits out the comparison.
+//
+// `changed` is how many files it would rewrite. Zero means it did no work at all,
+// which is not a fast formatter but an empty one: a `prettierignore` whose
+// allowlist stopped matching prints "All matched files use Prettier code style!"
+// and exits 0, and the timed run that follows measures process startup.
+//
+// A count that stops matching reads as "unknown", never as agreement —
+// `preflight-selftest.mjs` verifies every pattern here against fixtures.
+const PREFLIGHT_SCOPE_COUNTS = {
+  // Counted from prettier's one-line-per-file `[warn] path` output rather than its
+  // summary sentence, which has two shapes ("in N files" / "in the above file")
+  // and none at all when there is nothing to change. Anchored on a source
+  // extension so the summary line itself — same `[warn] ` prefix — isn't counted.
+  prettier: { changed: countPrettierWarnings },
+  "prettier+oxc-parser": { changed: countPrettierWarnings },
+  biome: {
+    considered: /^Checked (\d+) files? in /m,
+    changed: /^Found (\d+) errors?\.$/m, // format-only run: "errors" are formatting diffs
+  },
+  oxfmt: {
+    considered: /^Finished in .+ on (\d+) files?/m,
+    changed: /^Format issues found in above (\d+) files?/m,
+  },
+  tsv: {
+    // "N would change, M unchanged[, K errors]" — the whole set it walked.
+    considered: (output) => {
+      const m = /^(\d+) would change, (\d+) unchanged(?:, (\d+) errors?)?/m.exec(output);
+      return m ? Number(m[1]) + Number(m[2]) + Number(m[3] ?? 0) : null;
+    },
+    changed: /^(\d+) would change/m,
+  },
+  "rsvelte-fmt": {
+    considered: /would reformat \d+ \/ (\d+) files/m,
+    changed: /would reformat (\d+) \/ \d+ files/m,
+  },
+};
+
+const PRETTIER_WARNED_FILE = new RegExp(String.raw`^\[warn\] (${SOURCE_PATH})$`, "gm");
+
+function countPrettierWarnings(output) {
+  const warned = [...output.matchAll(PRETTIER_WARNED_FILE)].length;
+  if (warned > 0) return warned;
+  // Distinguish "nothing to change" from "the output shape moved": the first is
+  // a corpus fact, the second means this count can't be trusted at all.
+  return /All matched files use Prettier code style!/.test(output) ? 0 : null;
+}
+
+/** Read one count out of a check command's output; null when it isn't there. */
+function readCount(spec, output) {
+  if (!spec) return null;
+  if (typeof spec === "function") return spec(output);
+  const match = spec.exec(output);
+  return match ? Number(match[1]) : null;
+}
+
 const PREFLIGHT_ERROR_SIGNALS = {
   prettier: /^\[error\] /m,
   "prettier+oxc-parser": /^\[error\] /m,
@@ -131,15 +274,19 @@ const PREFLIGHT_ERROR_SIGNALS = {
  * longer matches its own description. A corpus one formatter can't take is a
  * corpus to fix, not to quietly shrink.
  *
- * Returns `{failures, excluded, unavailable, crashed, unmatched, errored}` on a
- * clean pass. Reports everything it found before throwing; never silently drops
+ * Also cross-checks scope: every formatter that reports a file count must report
+ * the same one, and every formatter must have at least one file to change.
+ *
+ * Returns `{failures, excluded, unavailable, crashed, unmatched, errored, counts}`
+ * on a clean pass. Reports everything it found before throwing; never silently drops
  * anything. `quiet` suppresses that reporting and is meant for
  * `preflight-selftest.mjs`, which drives this function many times over fixtures
  * and prints its own summary; the thrown error carries the same report as
  * `error.report` either way.
  *
  * @throws if any formatter rejects a file, fails to launch, crashes mid-check,
- * errors without naming a file, or has no diagnostic matcher to read
+ * errors without naming a file, has no diagnostic matcher to read, finds nothing
+ * to change, or disagrees with the others about how many files are in scope
  */
 export async function runPreflight(checks, { quiet = false } = {}) {
   const log = quiet ? () => {} : console.log;
@@ -153,6 +300,7 @@ export async function runPreflight(checks, { quiet = false } = {}) {
   const crashed = [];
   const unmatched = [];
   const errored = [];
+  const counts = {};
 
   for (const { name, command } of checks) {
     let output = "";
@@ -215,7 +363,20 @@ export async function runPreflight(checks, { quiet = false } = {}) {
       continue;
     }
 
-    log(`  ${name}: ${unique.length === 0 ? "clean" : `${unique.length} rejected`}`);
+    const scope = PREFLIGHT_SCOPE_COUNTS[name] ?? {};
+    const considered = readCount(scope.considered, output);
+    const changed = readCount(scope.changed, output);
+    counts[name] = { considered, changed, reportsConsidered: scope.considered !== undefined };
+
+    // The scope numbers ride on the same line, after the status word the README
+    // consumer reads.
+    const scopeNote = [
+      considered === null ? null : `${considered} file${considered === 1 ? "" : "s"}`,
+      changed === null ? null : `${changed} would change`,
+    ].filter(Boolean);
+    const suffix = scopeNote.length > 0 ? ` (${scopeNote.join(", ")})` : "";
+
+    log(`  ${name}: ${unique.length === 0 ? "clean" : `${unique.length} rejected`}${suffix}`);
     for (const p of unique.slice(0, 5)) log(`      ${p}`);
     if (unique.length > 5) log(`      … and ${unique.length - 5} more`);
   }
@@ -246,7 +407,42 @@ export async function runPreflight(checks, { quiet = false } = {}) {
   if (unmatched.length > 0) problems.push(`no diagnostic matcher: ${unmatched.join(", ")}`);
   if (errored.length > 0) problems.push(`errored without naming a file: ${errored.join(", ")}`);
 
-  const report = { failures, excluded: [...excluded], unavailable, crashed, unmatched, errored };
+  // Every formatter must have work to do. A count that didn't parse is treated as
+  // no work rather than waved through — for prettier that IS the zero-scope
+  // report ("All matched files use Prettier code style!"), and for the others it
+  // means the line changed shape and the number can't be trusted.
+  const idle = Object.entries(counts)
+    .filter(([, c]) => !c.changed)
+    .map(([name]) => name);
+  if (idle.length > 0) {
+    log(
+      `  → ${idle.join(", ")} found nothing to change — either mis-scoped, or about to be timed doing no work`,
+    );
+    problems.push(`no files to format: ${idle.join(", ")}`);
+  }
+
+  // Every formatter that reports a file count must report the same one.
+  const scopes = Object.entries(counts).filter(([, c]) => c.reportsConsidered);
+  const unreadable = scopes.filter(([, c]) => c.considered === null).map(([name]) => name);
+  if (unreadable.length > 0) {
+    problems.push(`file count unreadable: ${unreadable.join(", ")}`);
+  }
+  const sizes = new Set(scopes.map(([, c]) => c.considered).filter((n) => n !== null));
+  if (sizes.size > 1) {
+    const detail = scopes.map(([name, c]) => `${name} ${c.considered}`).join(", ");
+    log(`  → scope mismatch: ${detail} — the formatters are not benching the same files`);
+    problems.push(`scope mismatch (${detail})`);
+  }
+
+  const report = {
+    failures,
+    excluded: [...excluded],
+    unavailable,
+    crashed,
+    unmatched,
+    errored,
+    counts,
+  };
 
   if (problems.length > 0) {
     // Abort rather than time a comparison that is no longer apples-to-apples.

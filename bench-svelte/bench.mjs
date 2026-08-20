@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
+import { execSync } from "child_process";
+
 import {
   checkGnuTime,
   createFormatters,
+  describeCorpus,
   printHeader,
   runHyperfine,
   runMemoryBenchmarks,
@@ -26,15 +29,21 @@ async function main() {
   checkGnuTime();
 
   console.log("");
+  const prepareCmd = `git -C ${dataDir} reset --hard`;
+
+  // Reset before the preflight below, not just between timed runs: its parse
+  // check and file counts have to describe the corpus that gets benchmarked, not
+  // whatever the previous run left formatted.
+  execSync(prepareCmd, { stdio: "ignore" });
+
   console.log(
     "Target: third-party .svelte corpus (kit, svelte.dev, layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake)",
   );
+  console.log(`Corpus: ${describeCorpus(dataDir)}`);
   console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
   console.log("- Git reset before each run");
   console.log("- .svelte only: the two Svelte-native formatters head-to-head");
   console.log("");
-
-  const prepareCmd = `git -C ${dataDir} reset --hard`;
 
   // Confirm both formatters accept the whole corpus before timing it, and abort
   // the scenario if one doesn't.

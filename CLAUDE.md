@@ -140,6 +140,26 @@ prettier+oxc-parser, and tsv are covered (`PREFLIGHT_ERROR_SIGNALS`) — biome c
 formatting diffs "errors" and oxfmt's failure text names no file, so neither has a
 signal that couldn't fire on an ordinary run.
 
+**Preflight also cross-checks scope**, from counts the same check output already
+carries: every formatter that reports how many files it looked at (biome `Checked
+N files`, oxfmt `Finished … on N files`, tsv `N would change, M unchanged`,
+rsvelte-fmt `would reformat N / M files`) must report the **same** number, and
+every formatter must find at least one file to change. The first turns "all three
+self-report 1648" from a hand-verified footnote into a per-run assertion — the
+three scoping mechanisms are unrelated, so they drift silently. The second catches
+the emptiest failure: a `prettierignore` whose allowlist stops matching prints
+"All matched files use Prettier code style!", exits 0, and the timed run that
+follows measures process startup. prettier reports no file count (its per-file
+`[warn]` lines give the would-change count instead), so it sits out the parity
+comparison but not the no-op check. The numbers ride on each preflight line after
+the status word, where the README consumer's parser ignores them.
+
+Each scenario now runs its `--prepare` command **before** preflight, not just
+between timed runs: the parse check and those counts have to describe the corpus
+that gets benchmarked, not whatever the previous run left formatted. (Without it,
+a second run in a row sees a corpus the last formatter already rewrote and trips
+the no-op check.)
+
 **Any of those aborts the scenario** (`runPreflight` throws; `bench-all.mjs` logs
 it and moves to the next scenario). It deliberately does _not_ filter the rejected
 files out and carry on: the formatters are scoped by three separate mechanisms
@@ -334,11 +354,14 @@ lives:
   applies a build-output heuristic (`dist`/`build`/`target` + hidden dirs) and
   warns that a `.prettierignore` won't be read. Because tsv self-scopes by
   extension while the other three are scoped by config, **the corpus decides
-  whether they agree** — verified on outline: tsv discovers exactly 1648 files
-  (1339 `.ts` + 308 `.js` + 1 `.mjs`) and biome and oxfmt each self-report the same 1648. That holds _because_ outline has no `.svelte`/`.css` (which tsv would grab
+  whether they agree** — on outline, tsv discovers exactly 1648 files
+  (1339 `.ts` + 308 `.js` + 1 `.mjs`) and biome and oxfmt each self-report the same 1648. Preflight now asserts that agreement on every run rather than leaving it to
+  a periodic hand-check, and `assertScopeConfigsAgree` checks the three scoping
+  files name the same extensions before the corpus is even read. It holds _because_ outline has no `.svelte`/`.css` (which tsv would grab
   and the JS/TS-scoped configs would skip) and no in-corpus `.prettierignore`
   (which tsv would honor and the others would not, since they're pointed at the
-  scenario's own ignore file). Re-check both if the corpus changes. (Note: tsv
+  scenario's own ignore file) — if either changes, the scenario aborts instead of
+  publishing a lopsided comparison. (Note: tsv
   formats `.d.ts` — the extension is `.ts` — and outline's 15 are in scope for
   everyone via `!*.ts`.) `tsv format <dir> --list` prints the in-scope set without
   writing — the read-only way to confirm scope.
@@ -419,7 +442,10 @@ Candidates:
   pins (`v5.9.2`); the clones should too. `bench-svelte`'s five library clones
   and two sibling checkouts are likewise unpinned, though its snapshot at least
   freezes the corpus between regenerations and records source commits in
-  `data/`'s commit message.
+  `data/`'s commit message. Until they are pinned, each scenario at least prints a
+  `Corpus:` line (`describeCorpus`) naming the commit and date it ran against — or,
+  for the single downloaded file, its size and content hash — so two runs can be
+  told apart instead of silently differing.
 - **A `--version` flag for tsv.** The README's tsv version is parsed out of
   `../tsv/Cargo.toml` because the binary cannot report it, which is why the
   copy-in path degrades to `unknown` and why CI would need the tsv source checked
@@ -468,7 +494,8 @@ formatters, on `.svelte` files only.
   differently (tsv is config-free and gitignore-aware; rsvelte-fmt walks
   `.svelte` itself and hands the rest of a directory to oxfmt, which would pick
   up `.json`/`.md`/etc), so a tree containing only the corpus files is the one
-  way to pin both to the same set — verified: both self-report 2230. The
+  way to pin both to the same set — both self-report 2230, which preflight now
+  asserts every run. The
   `git init` makes `data/` its own git root (sidestepping the outer
   `.gitignore` trap described above) and provides the reset-per-run baseline;
   provenance (per-source commit + file count) is recorded in the snapshot's
@@ -476,10 +503,15 @@ formatters, on `.svelte` files only.
   `rm -rf bench-svelte/data && node ./bench-svelte/setup-corpus.mjs`.
 - **No `--ignore-failure`** (alone among the scenarios): both formatters exit 0
   on a successful write run, so any non-zero exit here is a real error — and
-  rsvelte-fmt has shown (in 0.7.4) a rare nondeterministic SIGABRT (its launcher
+  rsvelte-fmt has a nondeterministic SIGABRT — seen in 0.7.4 and still in 0.7.11,
+  in check mode as well as write mode, and not rare: it hit roughly one run in
+  four over this corpus during one sitting (its launcher
   propagates signal deaths as exit 128+n, e.g. 134), which must abort the
   benchmark rather than be timed as a fast partial run. `runPreflight` flags
-  crashed check passes the same way.
+  crashed check passes the same way — so expect this scenario to abort
+  occasionally and need a rerun, which is the honest outcome while the crash is
+  real: a retry inside the harness would hide a defect in a tool whose numbers
+  this README publishes.
 - **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-svelte/bench.mjs`
   overrides the 2 × 5 defaults for a fast, low-accuracy smoke run.
 - **Version**: `vp exec rsvelte-fmt --version` in

@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 
+import { execSync } from "child_process";
+
 import {
+  assertScopeConfigsAgree,
   checkGnuTime,
   createFormatters,
+  describeCorpus,
   printHeader,
   runHyperfine,
   runMemoryBenchmarks,
@@ -23,14 +27,26 @@ async function main() {
 
   checkGnuTime();
 
+  const prepareCmd = `git -C ${dataDir} reset --hard`;
+
+  // Reset before the preflight below, not just between timed runs: its parse
+  // check and file counts have to describe the corpus that gets benchmarked, not
+  // whatever the previous run left formatted.
+  execSync(prepareCmd, { stdio: "ignore" });
+
   console.log("");
+
+  // The three scoping files are independent; if they've drifted apart, the
+  // formatters below are not benching the same set. Cheap enough to check every
+  // run, and it needs no corpus.
+  assertScopeConfigsAgree(".");
+
   console.log("Target: Outline repository (non-JSX JS/TS subset)");
+  console.log(`Corpus: ${describeCorpus(dataDir)}`);
   console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
   console.log("- Git reset before each run");
   console.log("- .ts/.js/.mjs only: the common file set every formatter (incl. tsv) supports");
   console.log("");
-
-  const prepareCmd = `git -C ${dataDir} reset --hard`;
 
   // Confirm every formatter accepts the whole corpus before timing it, and abort
   // the scenario if one doesn't. hyperfine runs with --ignore-failure, so a tool

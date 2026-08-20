@@ -21,6 +21,10 @@
 //   exist, asserting the harness doesn't call a tool that failed at the command
 //   level "clean" — the state in which it would be timed doing no work at all
 //
+// The scope counts (`PREFLIGHT_SCOPE_COUNTS`) ride along: one fixture file means
+// every count must read exactly 1, so a count pattern that drifted can't quietly
+// skew the cross-formatter comparison preflight makes from them.
+//
 // The fixtures and their configs are generated into a temp directory, so nothing
 // broken is ever committed and this repo's own `vp check` never sees them. On
 // failure the directory is left in place and its path printed.
@@ -100,6 +104,9 @@ const CONFIGS = {
 const FIXTURES = {
   "broken.ts": BROKEN_TS,
   "clean.ts": CLEAN_TS,
+  // A second valid file, so two formatters can be pointed at different-sized sets
+  // to check the scope-parity rule itself.
+  "clean2.ts": CLEAN_TS,
   "broken.svelte": BROKEN_SVELTE,
   "clean.svelte": CLEAN_SVELTE,
 };
@@ -121,9 +128,14 @@ function buildCases(formatters) {
       command: (f) => formatters.check.prettier(f, "prettierrc-oxc.json"),
       detectsCommandErrors: true,
     },
-    { name: "biome", command: (f) => formatters.check.biome(f) },
-    { name: "oxfmt", command: (f) => formatters.check.oxfmt(f) },
-    { name: "tsv", command: (f) => formatters.check.tsv(f), detectsCommandErrors: true },
+    { name: "biome", command: (f) => formatters.check.biome(f), reportsConsidered: true },
+    { name: "oxfmt", command: (f) => formatters.check.oxfmt(f), reportsConsidered: true },
+    {
+      name: "tsv",
+      command: (f) => formatters.check.tsv(f),
+      detectsCommandErrors: true,
+      reportsConsidered: true,
+    },
   ];
 
   return [
@@ -133,6 +145,7 @@ function buildCases(formatters) {
       command: (f) => formatters.check.rsvelte(f),
       rejects: "broken.svelte",
       accepts: "clean.svelte",
+      reportsConsidered: true,
     },
   ];
 }
@@ -141,7 +154,7 @@ function buildCases(formatters) {
 async function probe(name, command) {
   try {
     const report = await runPreflight([{ name, command }], { quiet: true });
-    return { rejected: report.failures[name], clean: true };
+    return { rejected: report.failures[name], counts: report.counts[name], clean: true };
   } catch (error) {
     const report = error.report;
     if (!report) throw error; // not a preflight failure — a bug in the harness
@@ -151,6 +164,7 @@ async function probe(name, command) {
       crashed: report.crashed.includes(name),
       unmatched: report.unmatched.includes(name),
       errored: report.errored.includes(name),
+      counts: report.counts[name],
       clean: false,
     };
   }
@@ -187,7 +201,7 @@ async function main() {
   });
 
   for (const testCase of cases) {
-    const { name, command, rejects, accepts, detectsCommandErrors } = testCase;
+    const { name, command, rejects, accepts, detectsCommandErrors, reportsConsidered } = testCase;
 
     const onBroken = await probe(name, command(`./${rejects}`));
     if (onBroken.unavailable) {
@@ -219,6 +233,17 @@ async function main() {
       problems.push(`did not accept the valid fixture ${accepts}`);
     }
 
+    // The scope counts preflight compares across formatters come from the same
+    // per-tool text, so they drift the same way. One fixture file means every
+    // count must read exactly 1 — a matcher that silently returns null (or the
+    // wrong number) fails here rather than skewing a parity check later.
+    if (onClean.counts?.changed !== 1) {
+      problems.push(`read ${onClean.counts?.changed ?? "no"} would-change count, expected 1`);
+    }
+    if (reportsConsidered && onClean.counts?.considered !== 1) {
+      problems.push(`read ${onClean.counts?.considered ?? "no"} file count, expected 1`);
+    }
+
     if (detectsCommandErrors) {
       const onMissing = await probe(name, command("./does-not-exist.ts"));
       if (onMissing.clean) {
@@ -235,6 +260,34 @@ async function main() {
     } else {
       const covers = detectsCommandErrors ? ", catches command-level errors" : "";
       console.log(`  ${name}: ok (rejects ${rejects}, clean on ${accepts}${covers})`);
+    }
+  }
+
+  // The count matchers are verified above; this checks what preflight does with
+  // them. Two formatters pointed at different file sets must abort — the rule that
+  // makes a drifted `prettierignore` or a corpus that grew a new file type loud
+  // instead of silent.
+  if (!skipped.includes("tsv")) {
+    try {
+      await runPreflight(
+        [
+          { name: "tsv", command: formatters.check.tsv("./clean.ts") },
+          { name: "biome", command: formatters.check.biome("./clean.ts ./clean2.ts") },
+        ],
+        { quiet: true },
+      );
+      failures.push({ name: "scope parity", problems: ["mismatched file counts did not abort"] });
+      console.log("  scope parity: FAILED — mismatched file counts did not abort");
+    } catch (error) {
+      if (/scope mismatch/.test(error.message)) {
+        console.log("  scope parity: ok (mismatched file counts abort)");
+      } else {
+        failures.push({
+          name: "scope parity",
+          problems: [`aborted for the wrong reason: ${error.message}`],
+        });
+        console.log(`  scope parity: FAILED — aborted for the wrong reason: ${error.message}`);
+      }
     }
   }
 
