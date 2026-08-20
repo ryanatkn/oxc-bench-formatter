@@ -1,7 +1,10 @@
 catalog:
   vite: npm:@voidzero-dev/vite-plus-core@latest
   vitest: npm:@voidzero-dev/vite-plus-test@latest
-  vite-plus: latest
+  # pinned: vite-plus 0.2.9 drops the `./binding` export that the (stale) latest
+  # @voidzero-dev/vite-plus-test 0.1.24 still requires, so `vp config` — and with
+  # it every `pnpm exec`/`vp run` — crashes. Unpin once the two versions line up.
+  vite-plus: 0.2.7
 minimumReleaseAgeExclude:
   - "@oxfmt/*"
   - oxfmt

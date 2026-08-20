@@ -13,11 +13,11 @@
     "@ianvs/prettier-plugin-sort-imports": "^4.7.0",
     "@prettier/plugin-oxc": "^0.2.0",
     "@rsvelte/fmt": "^0.7.4",
-    "oxfmt": "^0.60.0",
+    "oxfmt": "^0.64.0",
     "prettier": "^3.8.1",
     "prettier-plugin-packagejson": "^3.0.0",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "vite-plus": "catalog:"
   },
-  "packageManager": "pnpm@11.9.0"
+  "packageManager": "pnpm@11.17.0"
 }

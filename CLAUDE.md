@@ -421,7 +421,7 @@ formatters, on `.svelte` files only.
   `rm -rf bench-svelte/data && node ./bench-svelte/setup-corpus.mjs`.
 - **No `--ignore-failure`** (alone among the scenarios): both formatters exit 0
   on a successful write run, so any non-zero exit here is a real error — and
-  rsvelte-fmt 0.7.4 has shown a rare nondeterministic SIGABRT (its launcher
+  rsvelte-fmt has shown (in 0.7.4) a rare nondeterministic SIGABRT (its launcher
   propagates signal deaths as exit 128+n, e.g. 134), which must abort the
   benchmark rather than be timed as a fast partial run. `runPreflight` flags
   crashed check passes the same way.
