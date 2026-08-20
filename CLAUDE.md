@@ -217,6 +217,13 @@ on a `pnpm-lock.yaml` bump. Two reasons, both of which corrupt the results:
 So regenerate with `pnpm run update-readme` **locally**, where `../tsv` exists, and
 keep every row from one machine.
 
+**Merging upstream conflicts the README every time upstream reruns.** Take _this
+fork's_ block wholesale — upstream's numbers come from their machine and carry no
+tsv or `bench-svelte` rows, so a hunk-by-hunk merge produces a README whose rows
+are not comparable to each other. Then rerun `update-readme` locally if the merge
+moved a benched formatter's version. `package.json` conflicts are usually the same
+shape: union this fork's added dep with upstream's bump.
+
 **The README results block is a consumed interface.**
 [tsv.fuz.dev](https://tsv.fuz.dev/docs/benchmarks) renders these numbers on its
 benchmarks page, and since this suite publishes no JSON, its generator parses the
