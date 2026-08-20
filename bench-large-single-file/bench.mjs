@@ -42,8 +42,9 @@ async function main() {
   console.log("");
 
   // Confirm every formatter accepts the corpus before timing it, and abort the
-  // scenario if one doesn't. hyperfine runs with --ignore-failure, so a tool that
-  // rejects the file would otherwise be timed on work it never did.
+  // scenario if one doesn't. This is what lets the timed runs below drop
+  // --ignore-failure: a tool that rejects the file would otherwise be timed on
+  // work it never did.
   await runPreflight([
     { name: "prettier", command: formatters.check.prettier(dataFile) },
     {
@@ -55,8 +56,11 @@ async function main() {
     { name: "tsv", command: formatters.check.tsv(dataFile) },
   ]);
 
+  // No --ignore-failure: preflight above has already confirmed every formatter
+  // parses the whole corpus, so the corpus reasons a formatter would exit
+  // non-zero are ruled out before timing starts. What's left is a real crash —
+  // which must fail the scenario rather than be timed as a fast partial run.
   await runHyperfine([
-    "--ignore-failure",
     `--warmup=${WARMUP_RUNS}`,
     `--runs=${BENCHMARK_RUNS}`,
     "--prepare",

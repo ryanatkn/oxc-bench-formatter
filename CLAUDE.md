@@ -120,12 +120,13 @@ formatter, including tsv, supports) so the comparison is apples-to-apples;
 same real-world repo minus the 682 `.tsx` files tsv cannot parse, which keeps the
 corpus third-party: no formatter here is measured on code it already shaped.
 
-**Methodology — preflight:** every scenario except `bench-svelte` runs hyperfine
-with `--ignore-failure` (and the memory pass swallows command errors), so a
-formatter that _errors_ partway would be timed rather than penalized — one that
-rejected much of the corpus could look artificially fast. (`bench-svelte` drops
-the flag: both of its formatters exit 0 on a successful write run, so any
-non-zero exit there is a real error or crash and aborts the benchmark loudly.)
+**Methodology — preflight:** the three tsv-free upstream scenarios run hyperfine
+with `--ignore-failure` (and the memory pass swallows command errors everywhere),
+so a formatter that _errors_ partway is timed rather than penalized — one that
+rejected much of the corpus could look artificially fast. The three tsv-inclusive
+scenarios drop the flag, because preflight has already ruled out the corpus
+reasons a formatter would exit non-zero: what's left is a real crash, and it must
+fail the scenario rather than be timed as a fast partial run.
 The three tsv-inclusive scenarios guard against this with
 `runPreflight` (`shared/utils.mjs`), which runs each formatter's **check** command
 first, parses per-file parse errors out of its diagnostics (one matcher per tool —
@@ -206,6 +207,13 @@ A fixture note worth keeping: JSX in a `.ts` file is **not** a universal parse
 error. prettier's default parser, biome, oxfmt, and tsv all reject it, but
 `@prettier/plugin-oxc` parses it and calls the file already formatted — so the
 self-test uses a plain syntax error instead.
+
+**Run order is fixed, and tsv runs last.** hyperfine executes the `-n` commands in
+the order given and doesn't interleave or randomize them, so on a laptop that
+thermally throttles, later formatters run on a warmer machine. In the tsv
+scenarios tsv is the last command, which biases against it rather than for it —
+worth knowing before quoting a ratio to two decimal places, and worth re-checking
+if the order is ever changed.
 
 **Concurrency, when reading the numbers:** the harness never caps threads, so
 each formatter runs at its own default — tsv, oxfmt, biome, and rsvelte-fmt
@@ -543,7 +551,10 @@ formatters, on `.svelte` files only.
   crashed check passes the same way — so expect this scenario to abort
   occasionally and need a rerun, which is the honest outcome while the crash is
   real: a retry inside the harness would hide a defect in a tool whose numbers
-  this README publishes.
+  this README publishes. **Check for it after `update-readme`:** an aborted
+  scenario writes its banner and preflight into the README with no timings under
+  it, and tsv.fuz.dev's generator refuses a scenario it can't parse timings from.
+  Rerun before committing rather than shipping a half-scenario.
 - **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-svelte/bench.mjs`
   overrides the 2 × 5 defaults for a fast, low-accuracy smoke run.
 - **Version**: `vp exec rsvelte-fmt --version` in
