@@ -142,12 +142,26 @@ async function getVersions() {
       // no binary to date
     }
 
+    // @fuzdev/tsv_wasm is an npm package, but not one `vp exec` can reach: its
+    // bin is named `tsv`, the same name the native @fuzdev/tsv claims, so the
+    // harness addresses its cli.js by path and there is no bin to ask. Its CLI
+    // has no --version flag either (the native one does), so the installed
+    // package's own manifest is the source — still the artifact that ran.
+    let tsvWasm = "unknown";
+    try {
+      const pkg = JSON.parse(await readFile("node_modules/@fuzdev/tsv_wasm/package.json", "utf-8"));
+      tsvWasm = pkg.version;
+    } catch {
+      // not installed — the tsv-wasm row is missing from the results anyway
+    }
+
     return {
       prettier: prettier.stdout.trim(),
       biome: biome.stdout.trim().replace("Version: ", ""),
       oxfmt: oxfmt.stdout.trim().replace("Version: ", ""),
       rsvelte: rsvelte.stdout.trim().replace("rsvelte_fmt ", ""),
       tsv,
+      tsvWasm,
     };
   } catch (error) {
     console.error("Error fetching versions:", error);
@@ -186,8 +200,8 @@ ${benchmarkResults}
   // Update versions section. The trailing machine line is optional in the match
   // so this still works against a README written before it existed.
   const versionsRegex =
-    /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*rsvelte-fmt\*\*: .*\n- \*\*tsv\*\*: .*(\n\n_Measured on: .*_)?/;
-  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **rsvelte-fmt**: ${versions.rsvelte}\n- **tsv**: ${versions.tsv}\n\n_Measured on: ${describeMachine()} — the ratios below depend on the core count._`;
+    /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*rsvelte-fmt\*\*: .*\n- \*\*tsv\*\*: .*(\n- \*\*tsv_wasm\*\*: .*)?(\n\n_Measured on: .*_)?/;
+  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **rsvelte-fmt**: ${versions.rsvelte}\n- **tsv**: ${versions.tsv}\n- **tsv_wasm**: ${versions.tsvWasm}\n\n_Measured on: ${describeMachine()} — the ratios below depend on the core count._`;
 
   if (!versionsRegex.test(readmeContent)) {
     // Fail rather than warn: writing fresh numbers under a stale version list is

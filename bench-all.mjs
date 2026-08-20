@@ -15,6 +15,7 @@ const scenarios = [
   "bench-full-features",
   "bench-ts-only",
   "bench-svelte",
+  "bench-tsv-delivery",
 ];
 
 async function runScenario(scenario) {
@@ -57,7 +58,8 @@ async function main() {
     !existsSync("bench-full-features/data") ||
     !existsSync("bench-large-single-file/data/parser.ts") ||
     !existsSync("bench-ts-only/data") ||
-    !existsSync("bench-svelte/data")
+    !existsSync("bench-svelte/data") ||
+    !existsSync("bench-tsv-delivery/data/parser.ts")
   ) {
     console.log("Running setup...");
     execSync("./init.sh", { stdio: "inherit" });

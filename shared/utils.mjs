@@ -61,6 +61,13 @@ export function createFormatters(projectRoot, configDir) {
   // .svelte-only bench-svelte corpus that oxfmt leg spawns on zero files — the
   // startup cost is part of its shipped directory posture, so it stays.
   const rsvelteBin = `${projectRoot}/node_modules/.bin/rsvelte-fmt`;
+  // @fuzdev/tsv_wasm ships tsv's CLI as a Node script over the WASM engine —
+  // one source, shipped verbatim as the bin of both that package and the native
+  // @fuzdev/tsv. Addressed by explicit path rather than through
+  // `node_modules/.bin/tsv`, because both packages claim that same bin name:
+  // whichever installed last would own the symlink, and this row has to be the
+  // WASM one every time.
+  const tsvWasmCli = `${projectRoot}/node_modules/@fuzdev/tsv_wasm/cli.js`;
 
   // NOTE: Do not use `--experimental-cli`, as it seems to behave differently than the stable CLI...
   return {
@@ -77,6 +84,12 @@ export function createFormatters(projectRoot, configDir) {
     // .mjs/.cjs), .svelte, and .css. It has no JSX/TSX parser, so a .jsx/.tsx
     // file is never discovered and JSX inside a .js file is a parse error.
     tsv: (files) => `${tsvBin} format ${files}`,
+
+    // Same CLI contract as the native binary — subcommands, flags, exit codes,
+    // traversal and ignore rules, diagnostics — over the WASM engine instead,
+    // and single-threaded (`--jobs` is accepted for parity and ignored). Also
+    // non-configurable, so it takes no config argument either.
+    "tsv-wasm": (files) => `node ${tsvWasmCli} format ${files}`,
 
     // Unlike tsv, rsvelte-fmt is configurable; the scenario's oxfmtrc.json pins
     // it to tsv's fixed style (printWidth 100, tabs, single quotes, no trailing
@@ -95,6 +108,8 @@ export function createFormatters(projectRoot, configDir) {
       oxfmt: (files) => `${oxfmtBin} --check --config ${configDir}/oxfmtrc.json ${files}`,
 
       tsv: (files) => `${tsvBin} format --check ${files}`,
+
+      "tsv-wasm": (files) => `node ${tsvWasmCli} format --check ${files}`,
 
       rsvelte: (files) => `${rsvelteBin} --check --config ${configDir}/oxfmtrc.json ${files}`,
     },
@@ -220,6 +235,8 @@ export function assertScopeConfigsAgree(configDir) {
 // on exactly the corpus preflight exists to catch.
 const SOURCE_PATH = String.raw`.+?\.(?:[cm]?[jt]sx?|svelte|css)`;
 
+const TSV_DIAGNOSTIC = new RegExp(String.raw`^error: (${SOURCE_PATH}): `, "gm");
+
 const PREFLIGHT_MATCHERS = {
   // [error] path: SyntaxError: ...
   prettier: new RegExp(String.raw`^\[error\] (${SOURCE_PATH}): `, "gm"),
@@ -228,7 +245,11 @@ const PREFLIGHT_MATCHERS = {
   oxfmt: /,-\[(.+?):\d+:\d+\]/g, // miette snippet header
   // error: path: message — continuation lines carry no `error: ` prefix, but
   // anchor anyway so a pathless diagnostic can never register as a file.
-  tsv: new RegExp(String.raw`^error: (${SOURCE_PATH}): `, "gm"),
+  tsv: TSV_DIAGNOSTIC,
+  // The WASM CLI is the same source as the native binary's, so it prints the
+  // same diagnostics — shared here rather than copied so the two can't drift
+  // apart in this table while the tool keeps them identical.
+  "tsv-wasm": TSV_DIAGNOSTIC,
   // Anchored on the .svelte extension so summary lines ("rsvelte-fmt: would
   // reformat N files") can never read as a rejected path. Note this covers only
   // rsvelte-fmt's own Svelte leg; diagnostics from the oxfmt it delegates other
@@ -266,6 +287,15 @@ const PREFLIGHT_MATCHERS = {
 //
 // A count that stops matching reads as "unknown", never as agreement —
 // `preflight-selftest.mjs` verifies every pattern here against fixtures.
+const TSV_SCOPE_COUNTS = {
+  // "N would change, M unchanged[, K errors]" — the whole set it walked.
+  considered: (output) => {
+    const m = /^(\d+) would change, (\d+) unchanged(?:, (\d+) errors?)?/m.exec(output);
+    return m ? Number(m[1]) + Number(m[2]) + Number(m[3] ?? 0) : null;
+  },
+  changed: /^(\d+) would change/m,
+};
+
 const PREFLIGHT_SCOPE_COUNTS = {
   // Counted from prettier's one-line-per-file `[warn] path` output rather than its
   // summary sentence, which has two shapes ("in N files" / "in the above file")
@@ -281,14 +311,8 @@ const PREFLIGHT_SCOPE_COUNTS = {
     considered: /^Finished in .+ on (\d+) files?/m,
     changed: /^Format issues found in above (\d+) files?/m,
   },
-  tsv: {
-    // "N would change, M unchanged[, K errors]" — the whole set it walked.
-    considered: (output) => {
-      const m = /^(\d+) would change, (\d+) unchanged(?:, (\d+) errors?)?/m.exec(output);
-      return m ? Number(m[1]) + Number(m[2]) + Number(m[3] ?? 0) : null;
-    },
-    changed: /^(\d+) would change/m,
-  },
+  tsv: TSV_SCOPE_COUNTS,
+  "tsv-wasm": TSV_SCOPE_COUNTS,
   "rsvelte-fmt": {
     considered: /would reformat \d+ \/ (\d+) files/m,
     changed: /would reformat (\d+) \/ \d+ files/m,
@@ -317,6 +341,11 @@ const PREFLIGHT_ERROR_SIGNALS = {
   prettier: /^\[error\] /m,
   "prettier+oxc-parser": /^\[error\] /m,
   tsv: /^error: /m,
+  // Same `error: ` prefix as the native CLI, plus Node's own module-resolution
+  // failure: this row is a script addressed by path, so an uninstalled or moved
+  // package exits 1 with no diagnostics at all — which would otherwise read as a
+  // formatter that found nothing wrong.
+  "tsv-wasm": /^error: |^Error: Cannot find module /m,
 };
 
 /**

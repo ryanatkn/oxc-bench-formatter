@@ -136,6 +136,18 @@ function buildCases(formatters) {
       detectsCommandErrors: true,
       reportsConsidered: true,
     },
+    // The WASM CLI is the same source as the native binary's and shares its
+    // entries in all three preflight tables. Exercised anyway rather than
+    // assumed: the two are separately built and separately published, so
+    // "identical output" is a claim this checks, not a premise. It also proves
+    // the shared entries are reachable under this second key — a row whose name
+    // is missing from a table aborts its scenario.
+    {
+      name: "tsv-wasm",
+      command: (f) => formatters.check["tsv-wasm"](f),
+      detectsCommandErrors: true,
+      reportsConsidered: true,
+    },
   ];
 
   return [

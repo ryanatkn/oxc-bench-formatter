@@ -16,10 +16,15 @@ A benchmark suite comparing JS/TS formatters on **execution time** (via
 - **oxfmt** (`oxfmt`)
 - **tsv** (`tsv format`) — native Rust, JS/TS family + CSS/Svelte, no JSX/TSX;
   runs only in the non-JSX scenarios (`bench-ts-only`,
-  `bench-large-single-file`, `bench-svelte`). This is the fork's addition over upstream.
+  `bench-large-single-file`, `bench-svelte`, `bench-tsv-delivery`). This is the
+  fork's addition over upstream.
 - **rsvelte-fmt** (`rsvelte-fmt`) — `@rsvelte/fmt`, Rust Svelte formatter that
   formats `.svelte` in-process and delegates other files to oxfmt; runs only in
   `bench-svelte`, head-to-head with tsv. Also fork-added.
+- **tsv-wasm** (`@fuzdev/tsv_wasm`) — the same tsv CLI source over a WASM engine
+  in Node, single-threaded; the distribution anyone without a prebuilt native
+  binary installs. Runs only in `bench-tsv-delivery`, against native tsv. Also
+  fork-added.
 
 This suite measures the whole **CLI** (process spawn + I/O + multi-file parallel
 batch + RSS). A complementary fork,
@@ -39,9 +44,10 @@ runs `vp staged`. Package manager is pnpm 11.4.0; Node is pinned to `24`.
 What a merge from `oxc-project/bench-formatter` has to reconcile. Everything else
 is upstream's, untouched.
 
-- **Two formatters added**: tsv (native binary, `TSV_BIN`) and rsvelte-fmt.
-- **Two scenarios added**: `bench-ts-only`, `bench-svelte` — plus their entries in
-  `bench-all.mjs` and `init.sh`.
+- **Three formatters added**: tsv (native binary, `TSV_BIN`), rsvelte-fmt, and
+  tsv-wasm.
+- **Three scenarios added**: `bench-ts-only`, `bench-svelte`,
+  `bench-tsv-delivery` — plus their entries in `bench-all.mjs` and `init.sh`.
 - **`bench-large-single-file`** (upstream's) gained a tsv row, a preflight pass,
   tsv's style profile on the other four formatters, and lost `--ignore-failure`
   because preflight makes it redundant.
@@ -52,7 +58,8 @@ is upstream's, untouched.
   ratio to the lowest-memory formatter.
 - **`shared/utils.mjs`** carries the fork-owned preflight, scope, and provenance
   machinery; `preflight-selftest.mjs` (run first by `bench-all.mjs`) guards it.
-- **Tooling**: `.node-version` pinned to 24, `@rsvelte/fmt` added, `vite-plus`
+- **Tooling**: `.node-version` pinned to 24, `@rsvelte/fmt` and
+  `@fuzdev/tsv_wasm` added, `vite-plus`
   pinned in the catalog (see the comment in `pnpm-workspace.yaml`).
 
 ## Layout
@@ -70,6 +77,7 @@ bench-formatter/
 ├── bench-full-features/
 ├── bench-ts-only/                   # non-JSX scenario added by this fork (all 5 formatters incl. tsv)
 ├── bench-svelte/                    # Svelte scenario added by this fork (tsv vs rsvelte-fmt only)
+├── bench-tsv-delivery/              # what each tsv distribution costs (native vs WASM), fork-added
 ├── vite.config.ts / pnpm-workspace.yaml  # vite-plus tooling + catalog
 └── .github/workflows/               # ci.yml, security, update-readme
 ```
@@ -90,6 +98,8 @@ bench-<name>/
 `bench-svelte/` deviates from this shape: its only config is `oxfmtrc.json`
 (rsvelte-fmt's; tsv takes none), plus `setup-corpus.mjs` (builds `data/`) and a
 gitignored `repos/` clone cache — see "The rsvelte-fmt integration" below.
+`bench-tsv-delivery/` deviates further: `bench.mjs` and `data/`, no configs at
+all, since both of its rows are tsv and tsv is non-configurable.
 
 ## The harness — `shared/utils.mjs`
 
@@ -121,7 +131,7 @@ gitignored `repos/` clone cache — see "The rsvelte-fmt integration" below.
   below). Both are validated and a bad value exits with a one-line message:
   hyperfine _hangs_ on `--runs=0` and rejects `--runs=NaN`, so an unchecked typo
   would wedge the scenario or fail it long after the corpus was set up. Wired
-  into the three tsv scenarios; the three tsv-free ones keep upstream's
+  into the four tsv scenarios; the three tsv-free ones keep upstream's
   hard-coded constants.
 
 ## Scenarios
@@ -134,9 +144,11 @@ gitignored `repos/` clone cache — see "The rsvelte-fmt integration" below.
 | `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)      | `git reset --hard` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt      |
 | `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset (`.ts`/`.js`/`.mjs`) | `git reset --hard` (its own outline checkout)                      | 2 × 5         | all 5 (incl. tsv)        |
 | `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section)     | `git reset --hard` (snapshot repo built by `setup-corpus.mjs`)     | 2 × 5         | tsv, rsvelte-fmt         |
+| `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                       | `cp parser.ts.bak parser.ts`                                       | 2 × 5         | tsv, tsv-wasm            |
 
-**Quick runs**: the three tsv scenarios (`bench-large-single-file`,
-`bench-ts-only`, `bench-svelte`) take `BENCH_WARMUP` / `BENCH_RUNS` overrides via
+**Quick runs**: the four tsv scenarios (`bench-large-single-file`,
+`bench-ts-only`, `bench-svelte`, `bench-tsv-delivery`) take
+`BENCH_WARMUP` / `BENCH_RUNS` overrides via
 `benchRunCounts`, so a change to the harness can be smoke-tested in seconds
 rather than minutes: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-ts-only/bench.mjs`.
 Numbers from an override are not publishable, and don't pretend to be — every
@@ -160,11 +172,11 @@ corpus third-party: no formatter here is measured on code it already shaped.
 **Methodology — preflight:** the three tsv-free upstream scenarios run hyperfine
 with `--ignore-failure` (and the memory pass swallows command errors everywhere),
 so a formatter that _errors_ partway is timed rather than penalized — one that
-rejected much of the corpus could look artificially fast. The three tsv-inclusive
+rejected much of the corpus could look artificially fast. The four tsv-inclusive
 scenarios drop the flag, because preflight has already ruled out the corpus
 reasons a formatter would exit non-zero: what's left is a real crash, and it must
 fail the scenario rather than be timed as a fast partial run.
-The three tsv-inclusive scenarios guard against this with
+The four tsv-inclusive scenarios guard against this with
 `runPreflight` (`shared/utils.mjs`), which runs each formatter's **check** command
 first, parses per-file parse errors out of its diagnostics (one matcher per tool —
 they share no error format), and reports what each rejects before any timing. It
@@ -205,7 +217,7 @@ files out and carry on: the formatters are scoped by three separate mechanisms
 mid-run would mean generating per-run configs and publishing numbers for a corpus
 that no longer matches its own description. A corpus one formatter can't take is a
 corpus to fix, not to quietly shrink. Consequence worth knowing: on a machine
-without the tsv binary (CI), the two tsv scenarios and `bench-svelte` abort
+without the tsv binary (CI), all four tsv scenarios abort
 whole rather than losing just the tsv row.
 
 If the no-op check ever fires legitimately — a corpus that genuinely is already in
@@ -279,12 +291,13 @@ wall nor the CPU-work comparison in that scenario is engine-vs-engine.
 **Every formatter tsv competes against is pinned to tsv's style.** tsv is
 non-configurable — width 100, tabs, single quotes, no trailing commas — and it
 cannot be aligned down to a rival's defaults, so the rivals are aligned up to it.
-The three scenarios tsv runs in (`bench-large-single-file`, `bench-ts-only`,
-`bench-svelte`) set that same profile for prettier, prettier+oxc-parser, biome,
-oxfmt, and rsvelte-fmt, in each tool's own dialect: prettier/oxfmt take
-`printWidth` + `useTabs` + `singleQuote` + `trailingComma`, biome takes
-`formatter.lineWidth` + `indentStyle` and `javascript.formatter.quoteStyle` +
-`trailingCommas`.
+The three scenarios where tsv faces another formatter
+(`bench-large-single-file`, `bench-ts-only`, `bench-svelte`) set that same
+profile for prettier, prettier+oxc-parser, biome, oxfmt, and rsvelte-fmt, in each
+tool's own dialect: prettier/oxfmt take `printWidth` + `useTabs` + `singleQuote` +
+`trailingComma`, biome takes `formatter.lineWidth` + `indentStyle` and
+`javascript.formatter.quoteStyle` + `trailingCommas`. `bench-tsv-delivery` needs
+none of it — both of its rows are tsv, at tsv's one style by construction.
 
 The alternative — leaving each tool on its defaults (width 80) while tsv formats at
 100 — meant they were making different break decisions and rewriting different
@@ -321,7 +334,9 @@ in `README.md`, and refreshes the `## Versions` section. The
 prettier/biome/oxfmt/rsvelte-fmt versions come from `vp exec <bin> --version`;
 tsv's from `$TSV_BIN --version` — it's a native binary, so `vp exec` can't reach
 it, and asking the binary rather than `../tsv/Cargo.toml` means the published
-version names the build that was actually measured. CI
+version names the build that was actually measured. tsv-wasm's comes from its
+installed `package.json`: an npm package, but one whose bin can't be addressed by
+name (see the tsv-wasm section) and whose CLI has no `--version`. CI
 (`.github/workflows/ci.yml`) runs `vp run bench` on push/PR as a smoke test.
 
 **The rebuild is the publish path's job because nothing else does it.**
@@ -333,16 +348,16 @@ meant benching last week's build under this week's version string. So
 ../tsv/Cargo.toml` first (a no-op when current), skips that when `TSV_BIN` is set
 explicitly (pinning a fixed binary is what that path is for), and in either case
 aborts up front if the resolved binary isn't executable — rather than letting the
-three tsv scenarios abort one at a time and drop out of the README unremarked.
+four tsv scenarios abort one at a time and drop out of the README unremarked.
 
 **Heads-up — regenerate the README locally, on one machine.** `update-readme.yml`
 is **`workflow_dispatch` only**; it deliberately does _not_ auto-refresh the README
 on a `pnpm-lock.yaml` bump. Two reasons, both of which corrupt the results:
 
 - **CI has no tsv.** Neither workflow builds it, so preflight finds the binary
-  unavailable and `bench-large-single-file`, `bench-ts-only`, and `bench-svelte`
-  abort whole — the README loses those three scenarios entirely, not just their tsv
-  rows (per-scenario errors are non-fatal, so the run still "succeeds"). CI also has
+  unavailable and `bench-large-single-file`, `bench-ts-only`, `bench-svelte`, and
+  `bench-tsv-delivery` abort whole — the README loses those four scenarios
+  entirely, not just their tsv rows (per-scenario errors are non-fatal, so the run still "succeeds"). CI also has
   no `../kit`/`../svelte.dev` sibling checkouts, so the `bench-svelte` corpus can't
   build there either. Nothing blocks teaching CI to build tsv now —
   `github.com/fuzdev/tsv` is public and the corpus no longer needs the private fuz
@@ -398,7 +413,11 @@ numbers, but it does fail: pair a format change with a fix there.
   required ones and the scenario aborts rather than passing by default — a
   formatter with no matcher, or no would-change count, reads as unverified, not
   as clean. Add its case to `preflight-selftest.mjs` in the same commit; that is
-  what keeps the patterns honest as the tool's output drifts.
+  what keeps the patterns honest as the tool's output drifts. A formatter that
+  ships another one's CLI (tsv-wasm does) can _share_ the matcher and count
+  entries rather than copy them — they're pulled out as named constants for
+  exactly that — but it still needs its own self-test case: the two are built and
+  published separately, so identical output is a claim to check, not a premise.
 - **A formatter benched against tsv** is pinned to tsv's fixed style (width 100,
   tabs, single quotes, no trailing commas) in that scenario's config, in whatever
   dialect the tool speaks.
@@ -519,14 +538,28 @@ formats `.css`, and that parser is **not yet exercised** by any scenario.
 Candidates:
 
 - A CSS corpus so tsv's CSS parser gets benchmarked.
+- **A `tsv-npm` row in `bench-tsv-delivery`, and native tsv from npm.** When
+  `@fuzdev/tsv` publishes, its `tsv` bin (a Node dispatcher that `spawnSync`s the
+  platform package's native binary) is the third delivery path, and the one most
+  users get — it pays a Node cold start the native row doesn't. The same release
+  also lets the _native_ binary come from `@fuzdev/tsv-<triple>` instead of a
+  sibling `../tsv` build: version-pinned like every other formatter here, and
+  installable on CI, which is most of what keeps the tsv scenarios off the
+  runners today. `TSV_BIN` would stay the override for benching a dev build.
+- **A multi-file leg for `bench-tsv-delivery`.** It benches one file on purpose —
+  the WASM CLI is single-threaded and the native binary is not, so a tree would
+  fold core count into what reads as engine cost. A second, clearly-labelled
+  multi-file row would measure the thing that single file can't: what the
+  fallback costs on a real project, where losing the worker pool matters as much
+  as the engine does.
 - tsv-scoped variants of the embedded scenarios (`bench-mixed-embedded`,
   `bench-full-features`) — i.e. narrowing those corpora to tsv's supported set
   rather than leaving tsv out of them entirely.
-- Preflight for the three tsv-free scenarios. It only guards the three tsv-inclusive
+- Preflight for the three tsv-free scenarios. It only guards the four tsv-inclusive
   ones today; the `--ignore-failure` caveat applies everywhere, it just
   has no known bite where every formatter is a JS-native tool.
 - Command-level error signals for biome and oxfmt. `PREFLIGHT_ERROR_SIGNALS` covers
-  prettier and tsv; the other two have no error prefix that couldn't fire on an
+  prettier, tsv, and tsv-wasm; the other two have no error prefix that couldn't fire on an
   ordinary check run, so a failure that formats nothing still reads as clean there.
   A file-count assertion ("the tool reported looking at ≥ 1 files") would cover all
   of them, at the cost of another per-tool matcher to keep alive.
@@ -608,7 +641,53 @@ formatters, on `.svelte` files only.
   Rerun before committing rather than shipping a half-scenario.
 - **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-svelte/bench.mjs`
   overrides the 2 × 5 defaults for a fast, low-accuracy smoke run — see "Quick
-  runs" under Scenarios for the other two scenarios that take it.
+  runs" under Scenarios for the other three scenarios that take it.
 - **Version**: `vp exec rsvelte-fmt --version` in
   `bench-all-and-update-readme.mjs` (an npm bin, so `vp exec` reaches it where it
   can't reach tsv's native binary).
+
+## The tsv-wasm row (bench-tsv-delivery)
+
+[`@fuzdev/tsv_wasm`](https://www.npmjs.com/package/@fuzdev/tsv_wasm) is the third
+fork-added formatter, and the only one that isn't a different _formatter_ at all:
+it is tsv's own CLI over a WASM engine, the distribution anyone without a
+prebuilt native binary installs. It runs in one scenario, `bench-tsv-delivery`,
+against native tsv.
+
+- **The question it answers** is what a delivery path costs, not which formatter
+  is faster — so it is deliberately kept out of the comparison scenarios. A row
+  belongs in one of those if it's the honest counterpart to how the other tools
+  there are measured (that's the argument for a future `tsv-npm` row: prettier
+  and rsvelte-fmt are both benched through their Node launchers). Nothing benched
+  against tsv is a WASM build, so a WASM row there would only blur hyperfine's
+  `Summary` ratios across two different questions.
+- **Binary**: `node <projectRoot>/node_modules/@fuzdev/tsv_wasm/cli.js`. A
+  devDependency, so `pnpm install` covers it — but addressed by _path_ rather
+  than through `node_modules/.bin/tsv`, because the native `@fuzdev/tsv` claims
+  that same `tsv` bin name: with both installed, whichever landed last would own
+  the symlink, and this row has to be the WASM one every time.
+- **Same CLI source as the native binary** — subcommands, flags, exit codes,
+  traversal and hierarchical-ignore rules, diagnostics, and the
+  `N would change, M unchanged` summary line, all identical. So it shares tsv's
+  entries in all three preflight tables (`TSV_DIAGNOSTIC`, `TSV_SCOPE_COUNTS`,
+  and an error signal that also catches Node's own `Cannot find module` — the
+  failure mode a path-addressed script has and a bin doesn't). It still carries
+  its own `preflight-selftest.mjs` case.
+- **Single-threaded**: `--jobs` is accepted for drop-in parity and ignored. This
+  is why the scenario benches **one file**: the native binary clamps its worker
+  pool to the file count, so at one file both rows are honestly single-threaded,
+  where a tree would fold core count into what reads as engine cost.
+- **Reading its numbers**: `[User: …]` is not an engine proxy here. Node compiles
+  the WASM module on background threads, so the wasm row's User time can run well
+  above its wall time even on a single file, and by a margin that varies run to
+  run — that's compilation, not formatting.
+  The memory row is likewise the whole Node process: heap plus the wasm
+  instance's linear memory, which is the honest figure for this distribution but
+  not an engine-vs-engine comparison with the native binary's RSS.
+- **Version**: read from the installed package's `package.json` by
+  `bench-all-and-update-readme.mjs` and published as `**tsv_wasm**` in the
+  README's `## Versions` list. The mirror image of the native binary's situation:
+  the WASM CLI has no `--version` flag but does have an npm manifest, where the
+  native binary has the flag and no manifest.
+- **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-tsv-delivery/bench.mjs`,
+  as in the other three tsv scenarios.

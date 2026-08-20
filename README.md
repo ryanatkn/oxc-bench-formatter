@@ -4,11 +4,12 @@ This is a fork of [oxc-project/bench-formatter](https://github.com/oxc-project/b
 with [tsv](https://github.com/fuzdev/tsv) added.
 Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfmt** with **tsv** and **rsvelte-fmt**.
 
-> **About this fork.** It adds two formatters, two scenarios, and a set of guards against silently unfair comparisons. Upstream's own scenarios are left as they were except where tsv competes in them, plus one lopsided width setting; the deviations are listed in [CLAUDE.md](CLAUDE.md).
+> **About this fork.** It adds three formatters, three scenarios, and a set of guards against silently unfair comparisons. Upstream's own scenarios are left as they were except where tsv competes in them, plus one lopsided width setting; the deviations are listed in [CLAUDE.md](CLAUDE.md).
 >
 > - **[tsv](https://tsv.fuz.dev)** is a native-Rust formatter for the JS/TS family, CSS, and Svelte. It's built from a sibling `../tsv` checkout (or `TSV_BIN`), not installed from npm.
 > - **It has no JSX/TSX parser**, so it runs only where the corpus is JSX-free: `bench-large-single-file` (`parser.ts`) and the fork-added `bench-ts-only`, which benches Outline's non-JSX subset (`.ts`/`.js`/`.mjs`) with every formatter scoped to that same set.
 > - **`bench-svelte`** (also fork-added) puts tsv head-to-head with [rsvelte-fmt](https://github.com/baseballyama/rsvelte) (`@rsvelte/fmt`) on ~2,230 third-party `.svelte` files, with rsvelte-fmt configured to tsv's fixed style, as every formatter in a tsv scenario is.
+> - **`bench-tsv-delivery`** (also fork-added) answers a different question — what each way of _installing_ tsv costs. It benches the native binary against [`@fuzdev/tsv_wasm`](https://www.npmjs.com/package/@fuzdev/tsv_wasm), the same CLI over a WASM engine in Node that platforms without a prebuilt binary fall back to. No other formatter appears in it, so its ratios only ever compare tsv to tsv.
 > - **Reading the numbers:** they measure the whole CLI — process spawn, I/O, and each tool's own multi-file parallelism — not the engine, so the ratios move with the core count of the machine named under [Versions](#versions). Full methodology in [CLAUDE.md](CLAUDE.md).
 
 ## Formatters
@@ -19,6 +20,7 @@ Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfm
 - [Oxfmt](https://oxc.rs)
 - [rsvelte-fmt](https://github.com/baseballyama/rsvelte) (`@rsvelte/fmt`, Svelte scenario only)
 - [tsv](https://tsv.fuz.dev/)
+- [tsv](https://tsv.fuz.dev/) as WASM (`@fuzdev/tsv_wasm`, delivery scenario only)
 
 ## Run
 
@@ -53,12 +55,13 @@ node ./bench-svelte/bench.mjs
   - [Continue](https://github.com/continuedev/continue) repository (full features: sort imports + Tailwind CSS)
   - [Outline](https://github.com/outline/outline) again, scoped to its non-JSX subset (`.ts`/`.js`/`.mjs`) — the set every formatter including tsv supports (fork-added)
   - A `.svelte`-only snapshot of seven third-party sources: SvelteKit, svelte.dev, layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake (fork-added)
+  - The same `parser.ts` once more, its own copy, for the tsv delivery comparison — one file, so both rows are single-threaded and neither gains from core count (fork-added)
 - **Methodology**:
   - Multiple warmup runs before measurement
   - Multiple benchmark runs for statistical accuracy
   - Git reset before each run to ensure identical starting conditions
   - Memory usage measured using GNU time (peak RSS)
-  - Local binaries via `./node_modules/.bin/`; tsv is a native binary from `../tsv/target/release/tsv` (or `TSV_BIN`)
+  - Local binaries via `./node_modules/.bin/`; tsv is a native binary from `../tsv/target/release/tsv` (or `TSV_BIN`), and tsv-wasm runs `node_modules/@fuzdev/tsv_wasm/cli.js` directly
   - tsv is non-configurable (width 100, tabs, single quotes, no trailing commas), so every formatter it is compared against is pinned to that same style — equal break decisions and equal output volume, at the cost of taking each tool off its own defaults
   - The tsv scenarios run a preflight parse check first — if any formatter rejects a file, that scenario aborts instead of timing a comparison the tools didn't run on the same work
   - That preflight also cross-checks scope: every formatter reporting a file count must report the same one, and every formatter must have at least one file to change — a mis-scoped tool that formats nothing would otherwise post an unbeatable time
