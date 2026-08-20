@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { exec } from "child_process";
-import { readFile, writeFile } from "fs/promises";
+import { readFile, stat, writeFile } from "fs/promises";
 import os from "os";
 import { promisify } from "util";
 
@@ -67,6 +67,21 @@ async function getVersions() {
       if (m) tsv = m[1];
     } catch {
       // ../tsv not present
+    }
+
+    // That version is a workspace constant: it doesn't move between builds, so it
+    // can't tell a binary built this morning from one built months ago — and the
+    // binary is what was actually measured. Its build date can, until tsv grows a
+    // `--version` of its own.
+    try {
+      const tsvBin = process.env.TSV_BIN ?? "../tsv/target/release/tsv";
+      // Local date, not toISOString(): a binary built at 20:57 local reads as the
+      // next day in UTC, which wouldn't match `git log --date=short` on the
+      // corpus line or the wall calendar of whoever ran the benchmark.
+      const built = (await stat(tsvBin)).mtime.toLocaleDateString("en-CA");
+      tsv = `${tsv} (binary built ${built})`;
+    } catch {
+      // no binary to date — the tsv rows will be missing from the results anyway
     }
 
     return {
