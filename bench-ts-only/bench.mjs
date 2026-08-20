@@ -19,7 +19,7 @@ async function main() {
   const dataDir = "./data";
   const formatters = createFormatters("..", ".");
 
-  printHeader("Benchmarking TypeScript-only (tsv-fair)");
+  printHeader("Benchmarking TypeScript-only (non-JSX subset)");
 
   checkGnuTime();
 
@@ -32,9 +32,10 @@ async function main() {
 
   const prepareCmd = `git -C ${dataDir} reset --hard`;
 
-  // Confirm every formatter accepts the whole corpus before timing it. hyperfine
-  // runs with --ignore-failure, so a tool that rejects files would otherwise be
-  // timed on the ones it skipped and look faster for it.
+  // Confirm every formatter accepts the whole corpus before timing it, and abort
+  // the scenario if one doesn't. hyperfine runs with --ignore-failure, so a tool
+  // that rejects files would otherwise be timed on the ones it skipped and look
+  // faster for it.
   await runPreflight([
     { name: "prettier", command: formatters.check.prettier(dataDir) },
     {
@@ -97,7 +98,7 @@ async function main() {
   );
 
   console.log("");
-  console.log("TypeScript-only (tsv-fair) benchmark complete!");
+  console.log("TypeScript-only (non-JSX subset) benchmark complete!");
 }
 
 main().catch((error) => {

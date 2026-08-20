@@ -1,5 +1,5 @@
 import { execSync, spawn } from "child_process";
-import { dirname } from "path";
+import { dirname, relative, resolve } from "path";
 import { fileURLToPath } from "url";
 
 const FORMATTER_NAMES = ["prettier", "prettier+oxc-parser", "biome", "oxfmt"];
@@ -70,20 +70,35 @@ export function createFormatters(projectRoot, configDir) {
 // path out of each one's diagnostics. Every formatter here reports parse errors
 // on stderr/stdout with the path in a tool-specific shape, so preflight needs one
 // matcher per tool rather than a shared format.
+
+// A path in one of the extensions any formatter here is pointed at. Matchers
+// whose prefix is not unique to a diagnostic line anchor on this: prettier
+// echoes the offending source lines under the same `[error] ` prefix, so an
+// unanchored capture reads `[error]   1 | const o = { alpha: 1 }` as a rejected
+// file named "  1 | const o = { alpha" — inflating the count with garbage paths
+// on exactly the corpus preflight exists to catch.
+const SOURCE_PATH = String.raw`.+?\.(?:[cm]?[jt]sx?|svelte|css)`;
+
 const PREFLIGHT_MATCHERS = {
-  prettier: /^\[error\] (.+?): /gm, // [error] path: SyntaxError: ...
-  "prettier+oxc-parser": /^\[error\] (.+?): /gm,
+  // [error] path: SyntaxError: ...
+  prettier: new RegExp(String.raw`^\[error\] (${SOURCE_PATH}): `, "gm"),
+  "prettier+oxc-parser": new RegExp(String.raw`^\[error\] (${SOURCE_PATH}): `, "gm"),
   biome: /^(.+?):\d+:\d+ parse /gm, // path:1:11 parse ━━━━━
   oxfmt: /,-\[(.+?):\d+:\d+\]/g, // miette snippet header
-  tsv: /^error: (.+?): /gm, // error: path: message
+  // error: path: message — continuation lines carry no `error: ` prefix, but
+  // anchor anyway so a pathless diagnostic can never register as a file.
+  tsv: new RegExp(String.raw`^error: (${SOURCE_PATH}): `, "gm"),
   // Anchored on the .svelte extension so summary lines ("rsvelte-fmt: would
-  // reformat N files") can never read as a rejected path.
+  // reformat N files") can never read as a rejected path. Note this covers only
+  // rsvelte-fmt's own Svelte leg; diagnostics from the oxfmt it delegates other
+  // files to arrive in oxfmt's format, which is fine while the corpus is
+  // .svelte-only.
   "rsvelte-fmt": /^rsvelte-fmt: (.+?\.svelte): /gm, // rsvelte-fmt: path: rsvelte_formatter error: ...
 };
 
 /**
- * Find the files each formatter cannot process, so a scenario benches every tool
- * on the set they all accept.
+ * Confirm every formatter accepts the whole corpus before any of them is timed,
+ * and abort the scenario if one does not.
  *
  * Without this, a formatter that *errors* on part of the corpus is still timed
  * (hyperfine runs with `--ignore-failure`), so rejecting files reads as speed.
@@ -91,10 +106,21 @@ const PREFLIGHT_MATCHERS = {
  * carrying JSX is a parse error for tsv and ordinary input for prettier, biome,
  * and oxfmt.
  *
- * Returns `{failures, excluded}` — per-formatter failing paths, and their union.
- * Reports what it found; never silently drops anything.
+ * Rejections are not filtered out and the run continued: the three formatters
+ * are scoped by three separate mechanisms (`prettierignore`, oxfmt
+ * `ignorePatterns`, biome `files.includes`), so narrowing the set mid-run would
+ * mean generating per-run configs and publishing numbers for a corpus that no
+ * longer matches its own description. A corpus one formatter can't take is a
+ * corpus to fix, not to quietly shrink.
+ *
+ * Returns `{failures, excluded, unavailable, crashed, unmatched}` on a clean
+ * pass. Reports everything it found before throwing; never silently drops
+ * anything.
+ *
+ * @throws if any formatter rejects a file, fails to launch, crashes mid-check,
+ * or has no diagnostic matcher to read
  */
-export async function runPreflight(checks, cwd = ".") {
+export async function runPreflight(checks) {
   console.log("");
   console.log("Preflight (per-formatter parse check):");
 
@@ -102,13 +128,14 @@ export async function runPreflight(checks, cwd = ".") {
   const excluded = new Set();
   const unavailable = [];
   const crashed = [];
+  const unmatched = [];
 
   for (const { name, command } of checks) {
     let output = "";
     let launchFailed = false;
     let crashStatus = null;
     try {
-      output = execSync(`${command} 2>&1`, { encoding: "utf8", stdio: "pipe", cwd });
+      output = execSync(`${command} 2>&1`, { encoding: "utf8", stdio: "pipe" });
     } catch (error) {
       // check mode exits non-zero for "would change" and for real errors alike,
       // so a normal non-zero exit carries no signal — the diagnostics do. But a
@@ -139,8 +166,22 @@ export async function runPreflight(checks, cwd = ".") {
     }
 
     const matcher = PREFLIGHT_MATCHERS[name];
-    const paths = matcher ? [...output.matchAll(matcher)].map((m) => m[1]) : [];
-    const unique = [...new Set(paths.map((p) => p.replace(/^\.\//, "")))];
+    if (!matcher) {
+      // No matcher means nothing can be read out of this formatter's
+      // diagnostics, so "clean" would be an assumption, not a finding — the one
+      // outcome preflight exists to rule out. A formatter added to a scenario
+      // without a matcher fails here rather than passing by default.
+      failures[name] = [];
+      unmatched.push(name);
+      console.log(`  ${name}: UNKNOWN — no diagnostic matcher, coverage unverified`);
+      continue;
+    }
+
+    // Normalize to cwd-relative so the union below counts files, not spellings:
+    // tsv prints `./data/x.ts`, prettier and biome `data/x.ts`, rsvelte-fmt an
+    // absolute path — the same rejected file in three shapes.
+    const paths = [...output.matchAll(matcher)].map((m) => relative(process.cwd(), resolve(m[1])));
+    const unique = [...new Set(paths)];
     failures[name] = unique;
     for (const p of unique) excluded.add(p);
 
@@ -150,20 +191,36 @@ export async function runPreflight(checks, cwd = ".") {
   }
 
   for (const name of unavailable) {
-    console.log(`  → ${name} could not run — its benchmark row below is meaningless, not a pass`);
+    console.log(
+      `  → ${name} could not run — a benchmark row for it would be meaningless, not a pass`,
+    );
   }
   for (const name of crashed) {
     console.log(
       `  → ${name} crashed partway through its check — its coverage is unknown and its timed runs may crash too`,
     );
   }
-  if (excluded.size === 0 && unavailable.length === 0 && crashed.length === 0) {
-    console.log("  → all formatters accept the whole corpus; nothing excluded");
-  } else if (excluded.size > 0) {
-    console.log(`  → excluding ${excluded.size} file(s) rejected by at least one formatter`);
+  for (const name of unmatched) {
+    console.log(`  → ${name} has no matcher in PREFLIGHT_MATCHERS — add one before benching it`);
   }
 
-  return { failures, excluded: [...excluded], unavailable, crashed };
+  const problems = [];
+  if (excluded.size > 0) {
+    problems.push(`${excluded.size} file(s) rejected by at least one formatter`);
+  }
+  if (unavailable.length > 0) problems.push(`unavailable: ${unavailable.join(", ")}`);
+  if (crashed.length > 0) problems.push(`crashed: ${crashed.join(", ")}`);
+  if (unmatched.length > 0) problems.push(`no diagnostic matcher: ${unmatched.join(", ")}`);
+
+  if (problems.length > 0) {
+    // Abort rather than time a comparison that is no longer apples-to-apples.
+    console.log("  → aborting: this scenario would not measure every formatter on the same work");
+    throw new Error(`preflight failed — ${problems.join("; ")}`);
+  }
+
+  console.log("  → all formatters accept the whole corpus; nothing excluded");
+
+  return { failures, excluded: [...excluded], unavailable, crashed, unmatched };
 }
 
 // ---

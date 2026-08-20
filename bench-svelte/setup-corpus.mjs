@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Builds the bench-svelte corpus: a .svelte-only snapshot of five third-party
+// Builds the bench-svelte corpus: a .svelte-only snapshot of seven third-party
 // sources, committed into ./data as its own git repo.
 //
 // Why a snapshot instead of formatting the checkouts in place: the two
@@ -17,7 +17,7 @@
 // - sibling checkouts ../kit and ../svelte.dev — the same trees tsv's own
 //   benchmark corpus uses (../svelte is deliberately absent: its
 //   packages/svelte/src is the compiler, which contains no .svelte files)
-// - shallow clones of three Svelte component libraries into ./repos/
+// - shallow clones of five Svelte component libraries into ./repos/
 //   (gitignored, kept as a cache across rebuilds)
 //
 // Idempotent: exits early if ./data exists. Delete ./data to regenerate.

@@ -36,9 +36,8 @@ async function main() {
 
   const prepareCmd = `git -C ${dataDir} reset --hard`;
 
-  // Confirm both formatters accept the whole corpus before timing it. hyperfine
-  // runs with --ignore-failure, so a tool that rejects files would otherwise be
-  // timed on the ones it skipped and look faster for it.
+  // Confirm both formatters accept the whole corpus before timing it, and abort
+  // the scenario if one doesn't.
   await runPreflight([
     { name: "tsv", command: formatters.check.tsv(dataDir) },
     { name: "rsvelte-fmt", command: formatters.check.rsvelte(dataDir) },

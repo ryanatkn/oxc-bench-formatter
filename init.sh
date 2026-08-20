@@ -80,7 +80,8 @@ fi
 
 # Build the Svelte corpus for bench-svelte (tsv vs rsvelte-fmt, .svelte only).
 # Sibling checkouts (../kit, ../svelte.dev) plus cloned Svelte component
-# libraries (layerchart, svelte-ux, flowbite-svelte), snapshotted with fixtures
+# libraries (layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake),
+# snapshotted with fixtures
 # pruned into a git-init'd data/ tree — see bench-svelte/setup-corpus.mjs.
 if [ ! -d "bench-svelte/data" ]; then
 	echo "Building Svelte corpus for bench-svelte..."

@@ -32,9 +32,9 @@ async function main() {
 
   const prepareCmd = `cp ${dataFileBak} ${dataFile}`;
 
-  // Confirm every formatter accepts the corpus before timing it. hyperfine runs
-  // with --ignore-failure, so a tool that rejects the file would otherwise be
-  // timed on work it never did.
+  // Confirm every formatter accepts the corpus before timing it, and abort the
+  // scenario if one doesn't. hyperfine runs with --ignore-failure, so a tool that
+  // rejects the file would otherwise be timed on work it never did.
   await runPreflight([
     { name: "prettier", command: formatters.check.prettier(dataFile) },
     {

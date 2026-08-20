@@ -2,9 +2,14 @@
 
 This is a fork of [oxc-project/bench-formatter](https://github.com/oxc-project/bench-formatter)
 with [tsv](https://github.com/fuzdev/tsv) added.
-Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfmt** with **tsv**.
+Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfmt** with **tsv** and **rsvelte-fmt**.
 
-> **About this fork:** adds [tsv](https://tsv.fuz.dev) (native-Rust JS/TS, CSS, and Svelte formatter) to the comparison. tsv has no JSX/TSX parser, so it runs only in the JSX-free scenarios — `bench-large-single-file` (`parser.ts`) and `bench-ts-only`, a fork-added scenario benching Outline's non-JSX subset (`.ts`/`.js`/`.mjs`) with every formatter scoped to that same set. A second fork-added scenario, `bench-svelte`, benches tsv against [rsvelte-fmt](https://github.com/baseballyama/rsvelte) (`@rsvelte/fmt`) head-to-head on ~2,230 third-party `.svelte` files (SvelteKit, svelte.dev, layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake), with rsvelte-fmt configured to tsv's fixed style (width 100, tabs, single quotes) so output volume is comparable. The upstream scenarios are unchanged. tsv is a native binary built from a sibling `../tsv` checkout (or `TSV_BIN`), not an npm package. The ratios are machine-dependent and measure the CLI, not the engine; see [Formatters](#formatters) and [CLAUDE.md](CLAUDE.md) for the full methodology.
+> **About this fork.** The upstream scenarios are unchanged — everything here is additive.
+>
+> - **[tsv](https://tsv.fuz.dev)** is a native-Rust formatter for the JS/TS family, CSS, and Svelte. It's built from a sibling `../tsv` checkout (or `TSV_BIN`), not installed from npm.
+> - **It has no JSX/TSX parser**, so it runs only where the corpus is JSX-free: `bench-large-single-file` (`parser.ts`) and the fork-added `bench-ts-only`, which benches Outline's non-JSX subset (`.ts`/`.js`/`.mjs`) with every formatter scoped to that same set.
+> - **`bench-svelte`** (also fork-added) puts tsv head-to-head with [rsvelte-fmt](https://github.com/baseballyama/rsvelte) (`@rsvelte/fmt`) on ~2,230 third-party `.svelte` files, with rsvelte-fmt configured to tsv's fixed style (width 100, tabs, single quotes) so output volume is comparable.
+> - **Reading the numbers:** they measure the whole CLI — process spawn, I/O, and each tool's own multi-file parallelism — not the engine, so the ratios move with the core count of the machine named under [Versions](#versions). Full methodology in [CLAUDE.md](CLAUDE.md).
 
 ## Formatters
 
@@ -28,6 +33,8 @@ node ./bench-large-single-file/bench.mjs
 node ./bench-js-no-embedded/bench.mjs
 node ./bench-mixed-embedded/bench.mjs
 node ./bench-full-features/bench.mjs
+node ./bench-ts-only/bench.mjs
+node ./bench-svelte/bench.mjs
 ```
 
 ## Notes
@@ -44,12 +51,15 @@ node ./bench-full-features/bench.mjs
   - [Outline](https://github.com/outline/outline) repository (JS/JSX/TS/TSX only)
   - [Storybook](https://github.com/storybookjs/storybook) repository (mixed with embedded languages)
   - [Continue](https://github.com/continuedev/continue) repository (full features: sort imports + Tailwind CSS)
+  - [Outline](https://github.com/outline/outline) again, scoped to its non-JSX subset (`.ts`/`.js`/`.mjs`) — the set every formatter including tsv supports (fork-added)
+  - A `.svelte`-only snapshot of seven third-party sources: SvelteKit, svelte.dev, layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake (fork-added)
 - **Methodology**:
   - Multiple warmup runs before measurement
   - Multiple benchmark runs for statistical accuracy
   - Git reset before each run to ensure identical starting conditions
   - Memory usage measured using GNU time (peak RSS)
-  - Local binaries via `./node_modules/.bin/`
+  - Local binaries via `./node_modules/.bin/`; tsv is a native binary from `../tsv/target/release/tsv` (or `TSV_BIN`)
+  - The tsv scenarios run a preflight parse check first — if any formatter rejects a file, that scenario aborts instead of timing a comparison the tools didn't run on the same work
 
 ## Versions
 

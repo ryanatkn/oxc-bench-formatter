@@ -125,19 +125,39 @@ formatter that _errors_ partway would be timed rather than penalized — one tha
 rejected much of the corpus could look artificially fast. (`bench-svelte` drops
 the flag: both of its formatters exit 0 on a successful write run, so any
 non-zero exit there is a real error or crash and aborts the benchmark loudly.)
-The fork-added scenarios guard against this with
+The three tsv-inclusive scenarios guard against this with
 `runPreflight` (`shared/utils.mjs`), which runs each formatter's **check** command
 first, parses per-file parse errors out of its diagnostics (one matcher per tool —
 they share no error format), and reports what each rejects before any timing. It
-also flags a check command that fails to launch (exit 126/127) or crashes
-(exit ≥ 128, the killed-by-signal encoding) — either must read as "unknown
-coverage", never as clean. The
-asymmetry is real: tsv has no JSX parser, so JSX inside a `.js` file is a parse
-error for tsv and ordinary input for prettier, biome, and oxfmt. Outline's non-JSX
-subset is currently clean for all five, so preflight excludes nothing — it is a
-guard, not an active filter. The three tsv-free scenarios have no preflight; every
-formatter there is a JS-native tool that accepts the whole corpus, and a check pass
-over storybook/continue would cost minutes for no signal.
+also flags a check command that fails to launch (exit 126/127), crashes
+(exit ≥ 128, the killed-by-signal encoding), or has no matcher to read — each must
+read as "unknown coverage", never as clean.
+
+**Any of those aborts the scenario** (`runPreflight` throws; `bench-all.mjs` logs
+it and moves to the next scenario). It deliberately does _not_ filter the rejected
+files out and carry on: the formatters are scoped by three separate mechanisms
+(`prettierignore`, oxfmt `ignorePatterns`, biome `files.includes`), so narrowing
+mid-run would mean generating per-run configs and publishing numbers for a corpus
+that no longer matches its own description. A corpus one formatter can't take is a
+corpus to fix, not to quietly shrink. Consequence worth knowing: on a machine
+without the tsv binary (CI), the two tsv scenarios and `bench-svelte` abort
+whole rather than losing just the tsv row.
+
+The asymmetry preflight watches for is real: tsv has no JSX parser, so JSX inside a
+`.js` file is a parse error for tsv and ordinary input for prettier, biome, and
+oxfmt. Outline's non-JSX subset is currently clean for all five, so nothing has
+ever aborted — it is a guard, not an active filter. The three tsv-free scenarios
+have no preflight; every formatter there is a JS-native tool that accepts the whole
+corpus, and a check pass over storybook/continue would cost minutes for no signal.
+
+Matchers are the guard's weak point: they read tool-specific diagnostic text, so a
+formatter that changes its error format goes quiet rather than loud. Two things
+push back — an unrecognized formatter name aborts instead of reporting clean, and
+every matcher that isn't already unique to a diagnostic line anchors its capture on
+a source-file extension (prettier echoes the offending source lines under the same
+`[error] ` prefix, so an unanchored capture reads `[error]   1 | const o = { a: 1 }`
+as a rejected file). Re-check the matchers against a deliberately broken file after
+a formatter upgrade.
 
 **Concurrency, when reading the numbers:** the harness never caps threads, so
 each formatter runs at its own default — tsv, oxfmt, biome, and rsvelte-fmt
@@ -201,12 +221,12 @@ as a smoke test.
 is **`workflow_dispatch` only**; it deliberately does _not_ auto-refresh the README
 on a `pnpm-lock.yaml` bump. Two reasons, both of which corrupt the results:
 
-- **CI has no tsv.** Neither workflow builds it, so the tsv legs of
-  `bench-large-single-file` and `bench-ts-only` error out and the README silently
-  loses them (per-scenario errors and hyperfine `--ignore-failure` are non-fatal,
-  so the run still "succeeds"). CI also has no `../kit`/`../svelte.dev` sibling
-  checkouts, so the `bench-svelte` corpus can't build there and that whole
-  scenario errors non-fatally. Nothing blocks teaching CI to build tsv now —
+- **CI has no tsv.** Neither workflow builds it, so preflight finds the binary
+  unavailable and `bench-large-single-file`, `bench-ts-only`, and `bench-svelte`
+  abort whole — the README loses those three scenarios entirely, not just their tsv
+  rows (per-scenario errors are non-fatal, so the run still "succeeds"). CI also has
+  no `../kit`/`../svelte.dev` sibling checkouts, so the `bench-svelte` corpus can't
+  build there either. Nothing blocks teaching CI to build tsv now —
   `github.com/fuzdev/tsv` is public and the corpus no longer needs the private fuz
   repos — it just isn't wired up.
 - **Core count changes the answer.** biome, oxfmt, and tsv scale with cores while
@@ -361,9 +381,13 @@ Candidates:
 - tsv-scoped variants of the embedded scenarios (`bench-mixed-embedded`,
   `bench-full-features`) — i.e. narrowing those corpora to tsv's supported set
   rather than leaving tsv out of them entirely.
-- Preflight for the three tsv-free scenarios. It only guards the two tsv ones
-  today; the `--ignore-failure` caveat applies everywhere, it just has no known
-  bite where every formatter is a JS-native tool.
+- Preflight for the three tsv-free scenarios. It only guards the three tsv-inclusive
+  ones today; the `--ignore-failure` caveat applies everywhere, it just
+  has no known bite where every formatter is a JS-native tool.
+- A matcher self-test — run each formatter's check command over a fixture with a
+  deliberate syntax error and assert its matcher fires. Today an upstream change to
+  any tool's diagnostic format silently turns preflight into a no-op for that tool,
+  and only a manual re-check catches it.
 - **Pin the cloned corpora.** `init.sh` and both workflows clone
   outline/storybook/continue at their default-branch HEAD, unpinned, so the corpus
   drifts and a rerun months apart is not comparable — and outline is now cloned
