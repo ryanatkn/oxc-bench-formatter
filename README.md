@@ -4,7 +4,7 @@ This is a fork of [oxc-project/bench-formatter](https://github.com/oxc-project/b
 with [tsv](https://github.com/fuzdev/tsv) added.
 Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfmt** with **tsv** and **rsvelte-fmt**.
 
-> **About this fork.** The upstream scenarios are unchanged — everything here is additive.
+> **About this fork.** It adds two formatters, two scenarios, and a set of guards against silently unfair comparisons. Upstream's own scenarios are left as they were except where tsv competes in them, plus one lopsided width setting; the deviations are listed in [CLAUDE.md](CLAUDE.md).
 >
 > - **[tsv](https://tsv.fuz.dev)** is a native-Rust formatter for the JS/TS family, CSS, and Svelte. It's built from a sibling `../tsv` checkout (or `TSV_BIN`), not installed from npm.
 > - **It has no JSX/TSX parser**, so it runs only where the corpus is JSX-free: `bench-large-single-file` (`parser.ts`) and the fork-added `bench-ts-only`, which benches Outline's non-JSX subset (`.ts`/`.js`/`.mjs`) with every formatter scoped to that same set.

@@ -34,6 +34,27 @@ gating is delegated to **vite-plus** (`vp`): `prepare` runs `vp config`, staged
 files run `vp check --fix` (see `vite.config.ts`), and `.vite-hooks/pre-commit`
 runs `vp staged`. Package manager is pnpm 11.4.0; Node is pinned to `24`.
 
+## Deviations from upstream
+
+What a merge from `oxc-project/bench-formatter` has to reconcile. Everything else
+is upstream's, untouched.
+
+- **Two formatters added**: tsv (native binary, `TSV_BIN`) and rsvelte-fmt.
+- **Two scenarios added**: `bench-ts-only`, `bench-svelte` — plus their entries in
+  `bench-all.mjs` and `init.sh`.
+- **`bench-large-single-file`** (upstream's) gained a tsv row, a preflight pass,
+  tsv's style profile on the other four formatters, and lost `--ignore-failure`
+  because preflight makes it redundant.
+- **`bench-full-features`** (upstream's): oxfmt's `printWidth` raised to 100 to
+  match the prettier width upstream already set there — it was comparing 100
+  against 80.
+- **Every scenario** prints a `Corpus:` provenance line, and memory rows carry a
+  ratio to the lowest-memory formatter.
+- **`shared/utils.mjs`** carries the fork-owned preflight, scope, and provenance
+  machinery; `preflight-selftest.mjs` (run first by `bench-all.mjs`) guards it.
+- **Tooling**: `.node-version` pinned to 24, `@rsvelte/fmt` added, `vite-plus`
+  pinned in the catalog (see the comment in `pnpm-workspace.yaml`).
+
 ## Layout
 
 ```
