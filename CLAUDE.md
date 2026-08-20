@@ -315,13 +315,25 @@ time** (`apt install time` → `/usr/bin/time`; macOS `brew install gnu-time` �
 `gtime`). Without GNU time the timing benchmarks still run; only memory is
 skipped.
 
-`update-readme` scrapes stdout from `vp run bench`, replaces the block between
-`<!-- BENCHMARK_RESULTS_START -->` / `<!-- BENCHMARK_RESULTS_END -->` in
-`README.md`, and refreshes the `## Versions` section. The
-prettier/biome/oxfmt/rsvelte-fmt versions come from `vp exec <bin> --version`; tsv's comes from
-`[workspace.package]` in `../tsv/Cargo.toml` (it's a native binary, no npm
-version to query). CI (`.github/workflows/ci.yml`) runs `vp run bench` on push/PR
-as a smoke test.
+`update-readme` rebuilds tsv, scrapes stdout from `vp run bench`, replaces the
+block between `<!-- BENCHMARK_RESULTS_START -->` / `<!-- BENCHMARK_RESULTS_END -->`
+in `README.md`, and refreshes the `## Versions` section. The
+prettier/biome/oxfmt/rsvelte-fmt versions come from `vp exec <bin> --version`;
+tsv's from `$TSV_BIN --version` — it's a native binary, so `vp exec` can't reach
+it, and asking the binary rather than `../tsv/Cargo.toml` means the published
+version names the build that was actually measured. CI
+(`.github/workflows/ci.yml`) runs `vp run bench` on push/PR as a smoke test.
+
+**The rebuild is the publish path's job because nothing else does it.**
+`bench-all.mjs` runs `init.sh` only when a corpus is missing, and `init.sh` builds
+tsv only when the binary is _absent_ — it never refreshes a stale one, deliberately,
+so a pinned copy isn't overwritten. Fine while iterating; on the publish path it
+meant benching last week's build under this week's version string. So
+`update-readme` runs `cargo build --release -p tsv_cli --manifest-path
+../tsv/Cargo.toml` first (a no-op when current), skips that when `TSV_BIN` is set
+explicitly (pinning a fixed binary is what that path is for), and in either case
+aborts up front if the resolved binary isn't executable — rather than letting the
+three tsv scenarios abort one at a time and drop out of the README unremarked.
 
 **Heads-up — regenerate the README locally, on one machine.** `update-readme.yml`
 is **`workflow_dispatch` only**; it deliberately does _not_ auto-refresh the README
@@ -334,7 +346,8 @@ on a `pnpm-lock.yaml` bump. Two reasons, both of which corrupt the results:
   no `../kit`/`../svelte.dev` sibling checkouts, so the `bench-svelte` corpus can't
   build there either. Nothing blocks teaching CI to build tsv now —
   `github.com/fuzdev/tsv` is public and the corpus no longer needs the private fuz
-  repos — it just isn't wired up.
+  repos — it just isn't wired up. Until it is, `update-readme.yml` **fails** rather
+  than opening that PR: the script aborts up front on a missing tsv binary.
 - **Core count changes the answer.** biome, oxfmt, and tsv scale with cores while
   prettier is effectively serial, so a runner's ratios and a dev box's ratios are
   different numbers, not noisy versions of the same one. A README mixing rows from
@@ -372,8 +385,9 @@ numbers, but it does fail: pair a format change with a fix there.
   `runHyperfine([...])` call and a matching entry in its `runMemoryBenchmarks`
   list. If it's a native binary rather than an npm `.bin` (as tsv is), resolve
   it via an env-var override with a sibling-checkout default, teach `init.sh` to
-  build/locate it, and source its version from the binary/repo (not
-  `vp exec … --version`) in `bench-all-and-update-readme.mjs`.
+  build/locate it, and source its version from the binary itself (not
+  `vp exec … --version`, which only reaches npm bins) in
+  `bench-all-and-update-readme.mjs`.
 - **A formatter in a preflight scenario needs three more entries**, all in
   `shared/utils.mjs`, keyed by the same display name the scenario passes:
   a `check.<name>` builder (same scope and config, no writes), a
@@ -455,8 +469,9 @@ lives:
   it passes the file (`./data/parser.ts`) explicitly, and an explicit file arg
   bypasses the ignore files — a `tsv format ./data` _directory_ arg there would
   be pruned by the outer `.gitignore`. Both confirmed via `--list`.
-- **Version**: sourced from `[workspace.package]` in `../tsv/Cargo.toml` by
-  `bench-all-and-update-readme.mjs` (see Running, above).
+- **Version**: `tsv --version`, asked of the binary by
+  `bench-all-and-update-readme.mjs` — which also rebuilds it first (see Running,
+  above).
 
 ### Setting up the tsv binary
 
@@ -489,10 +504,12 @@ The harness resolves tsv from `TSV_BIN`, falling back to
   `init.sh` treats an executable `$TSV_BIN` as already-present — it won't rebuild
   or overwrite it — so the copy is used as-is. It's an ordinary dynamically-linked
   Rust binary: fine to move within the same OS/arch, not a portable static build.
-  Caveat for `update-readme`: the README's tsv **version** is read from
-  `../tsv/Cargo.toml`, not from the binary, so on the copy-in path without a
-  sibling `../tsv` it falls back to `unknown` — keep `../tsv` around (or fix the
-  version by hand) when regenerating the README.
+  `update-readme` treats it the same way — it won't rebuild or overwrite an
+  explicit `TSV_BIN` — and reads the version from the binary, so this path names
+  its real version with no sibling `../tsv` present. One wrinkle: the
+  `(binary built …)` suffix on that version line is the file's mtime, which for a
+  copied binary is when it was **copied**, not when it was built (`cp -p`
+  preserves the build time).
 
 ### Future tsv work (planned, not yet done)
 
@@ -523,10 +540,6 @@ Candidates:
   `Corpus:` line (`describeCorpus`) naming the commit and date it ran against — or,
   for the single downloaded file, its size and content hash — so two runs can be
   told apart instead of silently differing.
-- **A `--version` flag for tsv.** The README's tsv version is parsed out of
-  `../tsv/Cargo.toml` because the binary cannot report it, which is why the
-  copy-in path degrades to `unknown` and why CI would need the tsv source checked
-  out just to name a version.
 
 When adding these, keep the apples-to-apples discipline: scope _every_ formatter
 in a tsv-inclusive run to the same file set (the three-way `prettierignore` /
@@ -596,4 +609,5 @@ formatters, on `.svelte` files only.
   overrides the 2 × 5 defaults for a fast, low-accuracy smoke run — see "Quick
   runs" under Scenarios for the other two scenarios that take it.
 - **Version**: `vp exec rsvelte-fmt --version` in
-  `bench-all-and-update-readme.mjs` (it has a real `--version`, unlike tsv).
+  `bench-all-and-update-readme.mjs` (an npm bin, so `vp exec` reaches it where it
+  can't reach tsv's native binary).
