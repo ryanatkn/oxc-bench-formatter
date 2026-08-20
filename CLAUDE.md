@@ -226,17 +226,30 @@ still spins up a pool it cannot use** — it reports ~455ms User against ~235ms 
 That overhead inflates its User time without being formatting work, so neither the
 wall nor the CPU-work comparison in that scenario is engine-vs-engine.
 
-**Formatting width is not identical (unfixable):** prettier, biome, and oxfmt
-format at width 80 (oxfmt explicitly via `printWidth`, prettier and biome by
-default); tsv is non-configurable and always formats at width 100. Different widths
-mean different break decisions and different output volume. tsv cannot be aligned
-down to 80 — that's the whole point of its design — and aligning the other three
-_up_ to 100 would take them off their defaults, which is its own distortion and a
-bigger deviation from upstream's intent. So it stands as a documented asymmetry
-rather than something to fix. (`bench-ts-only` is fork-added and could be changed
-freely; `bench-large-single-file` is upstream's.) `bench-svelte` is the one
-exception: rsvelte-fmt _is_ configurable, so its `oxfmtrc.json` pins it to tsv's
-fixed style and that head-to-head has no width asymmetry.
+**Every formatter tsv competes against is pinned to tsv's style.** tsv is
+non-configurable — width 100, tabs, single quotes, no trailing commas — and it
+cannot be aligned down to a rival's defaults, so the rivals are aligned up to it.
+The three scenarios tsv runs in (`bench-large-single-file`, `bench-ts-only`,
+`bench-svelte`) set that same profile for prettier, prettier+oxc-parser, biome,
+oxfmt, and rsvelte-fmt, in each tool's own dialect: prettier/oxfmt take
+`printWidth` + `useTabs` + `singleQuote` + `trailingComma`, biome takes
+`formatter.lineWidth` + `indentStyle` and `javascript.formatter.quoteStyle` +
+`trailingCommas`.
+
+The alternative — leaving each tool on its defaults (width 80) while tsv formats at
+100 — meant they were making different break decisions and rewriting different
+amounts of the corpus, which shows up directly in the preflight counts: on
+`bench-ts-only` the width-80 tools reported 1564 files to change against tsv's
+1644, and pinning the profile brought all five to the same 1644. Equal work is
+worth more here than each tool's default, and the cost is that these rows aren't
+comparable with upstream's published numbers.
+
+The three tsv-free scenarios keep upstream's settings, except that
+`bench-full-features` now sets oxfmt's `printWidth` to 100 to match the prettier
+width upstream already chose there — that scenario was comparing prettier at 100
+against oxfmt at 80. It changes little in practice (oxfmt rewrites 2082 files
+either way; the sort-imports and tailwind transforms dominate), but the comparison
+is no longer lopsided by construction.
 
 ## Running
 
@@ -475,8 +488,8 @@ formatters, on `.svelte` files only.
 - **Config parity**: rsvelte-fmt is configurable where tsv is not, so
   `bench-svelte/oxfmtrc.json` pins it to tsv's fixed style — `printWidth: 100`,
   `useTabs`, `singleQuote`, `trailingComma: "none"` — making break decisions
-  and output volume comparable (see the width-asymmetry note above; this is the
-  one scenario without it).
+  and output volume comparable. This scenario set the precedent the other two
+  tsv-inclusive ones now follow (see the style-parity note above).
 - **The corpus** (`setup-corpus.mjs`): a `.svelte`-only snapshot of seven
   third-party sources. Sibling checkouts `../kit` (`packages/kit/src`) and
   `../svelte.dev` (`apps/svelte.dev/src` + `packages/repl/src` +

@@ -1,7 +1,9 @@
 {
   "$schema": "../node_modules/oxfmt/configuration_schema.json",
-  "printWidth": 80,
+  "printWidth": 100,
   "useTabs": true,
+  "singleQuote": true,
+  "trailingComma": "none",
   "embeddedLanguageFormatting": "off",
   "ignorePatterns": ["*", "!*/", "!*.ts", "!*.mts", "!*.cts", "!*.js", "!*.mjs", "!*.cjs"]
 }

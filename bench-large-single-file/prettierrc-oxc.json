@@ -1,5 +1,8 @@
 {
+  "printWidth": 100,
   "useTabs": true,
+  "singleQuote": true,
+  "trailingComma": "none",
   "embeddedLanguageFormatting": "off",
   "plugins": ["@prettier/plugin-oxc"]
 }

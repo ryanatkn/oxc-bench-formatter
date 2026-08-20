@@ -4,7 +4,15 @@
     "useIgnoreFile": false
   },
   "formatter": {
-    "formatWithErrors": true
+    "formatWithErrors": true,
+    "lineWidth": 100,
+    "indentStyle": "tab"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "trailingCommas": "none"
+    }
   },
   "linter": {
     "enabled": false
