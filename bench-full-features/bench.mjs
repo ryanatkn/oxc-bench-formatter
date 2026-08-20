@@ -3,6 +3,7 @@
 import {
   checkGnuTime,
   createFormatters,
+  describeCorpus,
   printHeader,
   runHyperfine,
   runMemoryBenchmarks,
@@ -24,6 +25,7 @@ async function main() {
 
   console.log("");
   console.log("Target: Continue repository (full features)");
+  console.log(`Corpus: ${describeCorpus(dataDir)}`);
   console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
   console.log("- Git reset before each run");
   console.log("");

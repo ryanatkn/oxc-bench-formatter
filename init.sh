@@ -83,9 +83,13 @@ fi
 # libraries (layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake),
 # snapshotted with fixtures
 # pruned into a git-init'd data/ tree — see bench-svelte/setup-corpus.mjs.
+SVELTE_CORPUS_FAILED=""
 if [ ! -d "bench-svelte/data" ]; then
 	echo "Building Svelte corpus for bench-svelte..."
-	node ./bench-svelte/setup-corpus.mjs
+	# Needs the ../kit and ../svelte.dev sibling checkouts. Without them this is
+	# the one setup step that can't complete, so record it and say so at the end
+	# rather than letting "Setup complete!" paper over it.
+	node ./bench-svelte/setup-corpus.mjs || SVELTE_CORPUS_FAILED="1"
 else
 	echo "Svelte corpus for bench-svelte already exists"
 fi
@@ -106,4 +110,8 @@ else
 fi
 
 echo ""
-echo "Setup complete! Run 'pnpm run bench' to start benchmarking."
+if [ -n "$SVELTE_CORPUS_FAILED" ]; then
+	echo "Setup complete EXCEPT the Svelte corpus — bench-svelte will fail and be skipped."
+else
+	echo "Setup complete! Run 'pnpm run bench' to start benchmarking."
+fi

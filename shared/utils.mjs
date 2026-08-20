@@ -113,17 +113,44 @@ export function describeCorpus(target) {
  */
 export function assertScopeConfigsAgree(configDir) {
   const read = (file) => readFileSync(`${configDir}/${file}`, "utf8");
-  const collect = (patterns, shape) =>
-    new Set(patterns.flatMap((p) => (shape.exec(p)?.[1] ? [shape.exec(p)[1]] : [])));
+
+  // Lines that carry no extension by design: deny-everything, re-include
+  // directories, comments, blanks.
+  const BOILERPLATE = /^(\*|!\*\/|#.*)?$/;
+
+  // A pattern matching neither the allowlist shape nor that boilerplate is
+  // reported, not skipped: a pattern this can't read is a pattern it isn't
+  // checking, and passing anyway would be the exact failure it exists to prevent.
+  const unreadable = [];
+  const collect = (file, patterns, shape) => {
+    const found = new Set();
+    for (const pattern of patterns.map((p) => p.trim())) {
+      const match = shape.exec(pattern);
+      if (match) found.add(match[1]);
+      else if (!BOILERPLATE.test(pattern)) unreadable.push(`${file}: ${pattern}`);
+    }
+    return found;
+  };
 
   const sets = {
-    prettierignore: collect(read("prettierignore").split("\n"), /^!\*(\.\w+)$/),
-    "oxfmtrc.json": collect(JSON.parse(read("oxfmtrc.json")).ignorePatterns ?? [], /^!\*(\.\w+)$/),
+    prettierignore: collect("prettierignore", read("prettierignore").split("\n"), /^!\*(\.\w+)$/),
+    "oxfmtrc.json": collect(
+      "oxfmtrc.json",
+      JSON.parse(read("oxfmtrc.json")).ignorePatterns ?? [],
+      /^!\*(\.\w+)$/,
+    ),
     "biome.json": collect(
+      "biome.json",
       JSON.parse(read("biome.json")).files?.includes ?? [],
       /^\*\*\/\*(\.\w+)$/,
     ),
   };
+
+  if (unreadable.length > 0) {
+    throw new Error(
+      `scope configs use patterns this check can't read, so it isn't checking them\n    ${unreadable.join("\n    ")}`,
+    );
+  }
 
   const describe = (set) => [...set].sort((a, b) => a.localeCompare(b)).join(" ") || "(nothing)";
   const [reference, ...others] = Object.values(sets);
@@ -277,9 +304,10 @@ const PREFLIGHT_ERROR_SIGNALS = {
  * Also cross-checks scope: every formatter that reports a file count must report
  * the same one, and every formatter must have at least one file to change.
  *
- * Returns `{failures, excluded, unavailable, crashed, unmatched, errored, counts}`
- * on a clean pass. Reports everything it found before throwing; never silently drops
- * anything. `quiet` suppresses that reporting and is meant for
+ * Returns `{failures, excluded, unavailable, crashed, unmatched, errored,
+ * oversized, counts}` on a clean pass. Reports everything it found before
+ * throwing; never silently drops anything. `quiet` suppresses that reporting and
+ * is meant for
  * `preflight-selftest.mjs`, which drives this function many times over fixtures
  * and prints its own summary; the thrown error carries the same report as
  * `error.report` either way.
@@ -300,15 +328,27 @@ export async function runPreflight(checks, { quiet = false } = {}) {
   const crashed = [];
   const unmatched = [];
   const errored = [];
+  const oversized = [];
   const counts = {};
 
   for (const { name, command } of checks) {
     let output = "";
     let launchFailed = false;
     let crashStatus = null;
+    let truncated = false;
     try {
-      output = execSync(`${command} 2>&1`, { encoding: "utf8", stdio: "pipe" });
+      // execSync defaults to a 1MB buffer, and overflowing it throws ENOBUFS with
+      // a partial stdout and no exit status — diagnostics would be silently cut
+      // off and read as fewer rejections. A check pass over a large corpus prints
+      // a line per file (prettier does), so raise the ceiling and treat an
+      // overflow as unreadable rather than as a result.
+      output = execSync(`${command} 2>&1`, {
+        encoding: "utf8",
+        stdio: "pipe",
+        maxBuffer: 256 * 1024 * 1024,
+      });
     } catch (error) {
+      truncated = error.code === "ENOBUFS";
       // check mode exits non-zero for "would change" and for real errors alike,
       // so a normal non-zero exit carries no signal — the diagnostics do. But a
       // 126/127 (or a spawn ENOENT) means the command never launched: a missing
@@ -327,6 +367,13 @@ export async function runPreflight(checks, { quiet = false } = {}) {
       failures[name] = [];
       unavailable.push(name);
       log(`  ${name}: unavailable (command failed to launch)`);
+      continue;
+    }
+
+    if (truncated) {
+      failures[name] = [];
+      oversized.push(name);
+      log(`  ${name}: output too large to capture — diagnostics incomplete`);
       continue;
     }
 
@@ -392,6 +439,11 @@ export async function runPreflight(checks, { quiet = false } = {}) {
   for (const name of unmatched) {
     log(`  → ${name} has no matcher in PREFLIGHT_MATCHERS — add one before benching it`);
   }
+  for (const name of oversized) {
+    log(
+      `  → ${name} printed more than could be captured — raise maxBuffer in runPreflight before trusting this corpus`,
+    );
+  }
   for (const name of errored) {
     log(
       `  → ${name} failed at the command level, not on a file — check its config, plugins, and paths`,
@@ -406,6 +458,7 @@ export async function runPreflight(checks, { quiet = false } = {}) {
   if (crashed.length > 0) problems.push(`crashed: ${crashed.join(", ")}`);
   if (unmatched.length > 0) problems.push(`no diagnostic matcher: ${unmatched.join(", ")}`);
   if (errored.length > 0) problems.push(`errored without naming a file: ${errored.join(", ")}`);
+  if (oversized.length > 0) problems.push(`output too large to capture: ${oversized.join(", ")}`);
 
   // Every formatter must have work to do. A count that didn't parse is treated as
   // no work rather than waved through — for prettier that IS the zero-scope
@@ -441,6 +494,7 @@ export async function runPreflight(checks, { quiet = false } = {}) {
     crashed,
     unmatched,
     errored,
+    oversized,
     counts,
   };
 
@@ -491,10 +545,16 @@ export async function runMemoryBenchmarks(benchmarks, runs) {
   console.log("Memory Usage:");
 
   const results = [];
+  const unmeasured = [];
   for (const bench of benchmarks) {
     const result = await measureMemory(bench.name, bench.command, bench.prepare, runs);
     if (result) {
       results.push(result);
+    } else {
+      // Say so rather than omitting the row. A formatter whose every run failed
+      // would otherwise just be absent from the table below, which reads as "not
+      // benched" at a glance and as nothing at all to a parser.
+      unmeasured.push(bench.name);
     }
   }
 
@@ -507,6 +567,10 @@ export async function runMemoryBenchmarks(benchmarks, runs) {
   // Print results, each relative to the lowest-memory formatter — the same
   // baseline-and-ratio shape hyperfine uses for timing, so the memory section
   // reads the same way. The baseline itself carries no ratio (it would be 1.00x).
+  for (const name of unmeasured) {
+    console.log(`  ${name}: not measured (every run failed)`);
+  }
+
   const baseline = results.reduce((lowest, r) => (r.mean < lowest.mean ? r : lowest));
   for (const result of results) {
     const parts = [`min: ${result.min.toFixed(1)} MB`, `max: ${result.max.toFixed(1)} MB`];

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execSync } from "child_process";
+import { existsSync } from "fs";
 
 import {
   checkGnuTime,
@@ -29,6 +30,16 @@ async function main() {
   checkGnuTime();
 
   console.log("");
+  // This is the one corpus that can't be fetched — it's built from sibling
+  // checkouts by setup-corpus.mjs — so name the fix instead of failing inside
+  // `git reset` with "not a git repository".
+  if (!existsSync(`${dataDir}/.git`)) {
+    console.error(
+      "bench-svelte corpus missing. Build it with `node ./bench-svelte/setup-corpus.mjs` (needs ../kit and ../svelte.dev checked out).",
+    );
+    process.exit(1);
+  }
+
   const prepareCmd = `git -C ${dataDir} reset --hard`;
 
   // Reset before the preflight below, not just between timed runs: its parse

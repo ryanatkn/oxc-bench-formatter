@@ -39,7 +39,7 @@ import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
-import { createFormatters, runPreflight } from "./shared/utils.mjs";
+import { assertScopeConfigsAgree, createFormatters, runPreflight } from "./shared/utils.mjs";
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));
 
@@ -263,6 +263,51 @@ async function main() {
     }
   }
 
+  // The static scope check has its own failure modes: a trio that disagrees must
+  // throw, and so must a pattern it can't parse — an allowlist it silently skips
+  // is an allowlist it isn't checking.
+  const scopeCases = [
+    {
+      label: "mismatched extensions",
+      files: {
+        prettierignore: "*\n!*/\n!*.ts\n!*.js\n",
+        "oxfmtrc.json": JSON.stringify({ ignorePatterns: ["*", "!*/", "!*.ts"] }),
+        "biome.json": JSON.stringify({ files: { includes: ["**/*.ts", "**/*.js"] } }),
+      },
+      expect: /scope configs disagree/,
+    },
+    {
+      label: "unparseable pattern",
+      files: {
+        prettierignore: "*\n!*/\n!*.ts\n!src/**/*.ts\n",
+        "oxfmtrc.json": JSON.stringify({ ignorePatterns: ["*", "!*/", "!*.ts"] }),
+        "biome.json": JSON.stringify({ files: { includes: ["**/*.ts"] } }),
+      },
+      expect: /can't read/,
+    },
+  ];
+
+  for (const { label, files, expect } of scopeCases) {
+    const dir = mkdtempSync(join(tmpdir(), "bench-formatter-scope-"));
+    for (const [file, contents] of Object.entries(files)) writeFileSync(join(dir, file), contents);
+    try {
+      assertScopeConfigsAgree(dir);
+      failures.push({ name: `scope configs (${label})`, problems: ["did not throw"] });
+      console.log(`  scope configs (${label}): FAILED — did not throw`);
+    } catch (error) {
+      if (expect.test(error.message)) {
+        console.log(`  scope configs (${label}): ok (rejected)`);
+      } else {
+        failures.push({
+          name: `scope configs (${label})`,
+          problems: [`threw the wrong error: ${error.message}`],
+        });
+        console.log(`  scope configs (${label}): FAILED — threw the wrong error`);
+      }
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+
   // The count matchers are verified above; this checks what preflight does with
   // them. Two formatters pointed at different file sets must abort — the rule that
   // makes a drifted `prettierignore` or a corpus that grew a new file type loud
@@ -294,7 +339,7 @@ async function main() {
   console.log("");
   if (failures.length > 0) {
     console.log(
-      `Preflight matcher self-test FAILED for ${failures.length} formatter(s) — preflight would report them clean no matter what the corpus holds.`,
+      `Preflight matcher self-test FAILED: ${failures.length} check(s) — preflight would pass corpora it should stop.`,
     );
     console.log(`Fixtures kept for debugging: ${fixtureDir}`);
     process.exit(1);

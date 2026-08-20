@@ -170,6 +170,11 @@ corpus to fix, not to quietly shrink. Consequence worth knowing: on a machine
 without the tsv binary (CI), the two tsv scenarios and `bench-svelte` abort
 whole rather than losing just the tsv row.
 
+If the no-op check ever fires legitimately — a corpus that genuinely is already in
+some formatter's style — the fix is a different corpus, not a relaxed check: benching
+a formatter against its own output measures its no-op path, which is not what any of
+these numbers claim to be.
+
 The asymmetry preflight watches for is real: tsv has no JSX parser, so JSX inside a
 `.js` file is a parse error for tsv and ordinary input for prettier, biome, and
 oxfmt. Outline's non-JSX subset is currently clean for all five, so nothing has
@@ -324,6 +329,20 @@ numbers, but it does fail: pair a format change with a fix there.
   it via an env-var override with a sibling-checkout default, teach `init.sh` to
   build/locate it, and source its version from the binary/repo (not
   `vp exec … --version`) in `bench-all-and-update-readme.mjs`.
+- **A formatter in a preflight scenario needs three more entries**, all in
+  `shared/utils.mjs`, keyed by the same display name the scenario passes:
+  a `check.<name>` builder (same scope and config, no writes), a
+  `PREFLIGHT_MATCHERS` pattern pulling rejected paths out of its diagnostics, and
+  `PREFLIGHT_SCOPE_COUNTS` patterns for how many files it looked at and how many
+  it would change. Optionally a `PREFLIGHT_ERROR_SIGNALS` pattern, if it has an
+  error prefix that can't appear on an ordinary check run. Miss any of the
+  required ones and the scenario aborts rather than passing by default — a
+  formatter with no matcher, or no would-change count, reads as unverified, not
+  as clean. Add its case to `preflight-selftest.mjs` in the same commit; that is
+  what keeps the patterns honest as the tool's output drifts.
+- **A formatter benched against tsv** is pinned to tsv's fixed style (width 100,
+  tabs, single quotes, no trailing commas) in that scenario's config, in whatever
+  dialect the tool speaks.
 
 ## The tsv integration
 

@@ -116,11 +116,15 @@ ${benchmarkResults}
     /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*rsvelte-fmt\*\*: .*\n- \*\*tsv\*\*: .*(\n\n_Measured on: .*_)?/;
   const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **rsvelte-fmt**: ${versions.rsvelte}\n- **tsv**: ${versions.tsv}\n\n_Measured on: ${describeMachine()} — the ratios below depend on the core count._`;
 
-  if (versionsRegex.test(readmeContent)) {
-    readmeContent = readmeContent.replace(versionsRegex, newVersionsContent);
-  } else {
-    console.warn("Could not find versions section in README.md");
+  if (!versionsRegex.test(readmeContent)) {
+    // Fail rather than warn: writing fresh numbers under a stale version list is
+    // the one outcome worse than not updating at all, and a warning in a
+    // multi-minute benchmark log is easy to scroll past.
+    throw new Error(
+      "Could not find the versions section in README.md — fresh results would be published under a stale version list",
+    );
   }
+  readmeContent = readmeContent.replace(versionsRegex, newVersionsContent);
 
   await writeFile(readmePath, readmeContent);
   console.log("README updated successfully");
