@@ -116,6 +116,13 @@ gitignored `repos/` clone cache — see "The rsvelte-fmt integration" below.
 - **`printHeader`**, **`FORMATTER_NAMES`** — display helpers.
 - **`setupCwd(import.meta.url)`** — each `bench.mjs` chdirs into its own dir so
   relative config/data paths resolve.
+- **`benchRunCounts(warmup, runs)`** — a scenario's run counts, with
+  `BENCH_WARMUP` / `BENCH_RUNS` overrides for smoke runs (see "Quick runs"
+  below). Both are validated and a bad value exits with a one-line message:
+  hyperfine _hangs_ on `--runs=0` and rejects `--runs=NaN`, so an unchecked typo
+  would wedge the scenario or fail it long after the corpus was set up. Wired
+  into the three tsv scenarios; the three tsv-free ones keep upstream's
+  hard-coded constants.
 
 ## Scenarios
 
@@ -127,6 +134,15 @@ gitignored `repos/` clone cache — see "The rsvelte-fmt integration" below.
 | `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)      | `git reset --hard` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt      |
 | `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset (`.ts`/`.js`/`.mjs`) | `git reset --hard` (its own outline checkout)                      | 2 × 5         | all 5 (incl. tsv)        |
 | `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section)     | `git reset --hard` (snapshot repo built by `setup-corpus.mjs`)     | 2 × 5         | tsv, rsvelte-fmt         |
+
+**Quick runs**: the three tsv scenarios (`bench-large-single-file`,
+`bench-ts-only`, `bench-svelte`) take `BENCH_WARMUP` / `BENCH_RUNS` overrides via
+`benchRunCounts`, so a change to the harness can be smoke-tested in seconds
+rather than minutes: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-ts-only/bench.mjs`.
+Numbers from an override are not publishable, and don't pretend to be — every
+scenario prints the counts it resolved in its header, so an override is visible
+in a scraped README. The three tsv-free scenarios are upstream's files and keep
+upstream's hard-coded constants, to hold the merge surface down.
 
 The two embedded/full-features scenarios deliberately drop plain-prettier and
 biome and bench only the prettier+oxc-parser vs oxfmt pair. File-type scoping is
@@ -577,6 +593,7 @@ formatters, on `.svelte` files only.
   it, and tsv.fuz.dev's generator refuses a scenario it can't parse timings from.
   Rerun before committing rather than shipping a half-scenario.
 - **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-svelte/bench.mjs`
-  overrides the 2 × 5 defaults for a fast, low-accuracy smoke run.
+  overrides the 2 × 5 defaults for a fast, low-accuracy smoke run — see "Quick
+  runs" under Scenarios for the other two scenarios that take it.
 - **Version**: `vp exec rsvelte-fmt --version` in
   `bench-all-and-update-readme.mjs` (it has a real `--version`, unlike tsv).

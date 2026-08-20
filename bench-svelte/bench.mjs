@@ -4,6 +4,7 @@ import { execSync } from "child_process";
 import { existsSync } from "fs";
 
 import {
+  benchRunCounts,
   checkGnuTime,
   createFormatters,
   describeCorpus,
@@ -14,10 +15,7 @@ import {
   setupCwd,
 } from "../shared/utils.mjs";
 
-// Overridable for quick smoke runs (fewer runs, less accuracy), e.g.
-// BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-svelte/bench.mjs
-const WARMUP_RUNS = Number(process.env.BENCH_WARMUP ?? 2);
-const BENCHMARK_RUNS = Number(process.env.BENCH_RUNS ?? 5);
+const [WARMUP_RUNS, BENCHMARK_RUNS] = benchRunCounts(2, 5);
 
 async function main() {
   setupCwd(import.meta.url);

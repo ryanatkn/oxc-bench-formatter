@@ -13,6 +13,41 @@ export function setupCwd(importMetaUrl) {
   process.chdir(__dirname);
 }
 
+/**
+ * A scenario's warmup and benchmark run counts, overridable for a quick
+ * low-accuracy smoke run: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-ts-only/bench.mjs`.
+ *
+ * Returns `[warmup, runs]` — the order hyperfine takes them and the order every
+ * scenario prints them, so an override always shows up in the header line and
+ * can't be mistaken for a full run in a scraped README.
+ *
+ * Both are validated rather than passed through. hyperfine *hangs* on
+ * `--runs=0` and rejects `--runs=NaN`, so an unchecked env typo would either
+ * wedge the scenario or fail it deep inside a run, well after the corpus setup.
+ * A warmup of 0 is the whole point of a smoke run; a benchmark run count of 0 is
+ * never meant.
+ */
+export function benchRunCounts(warmupDefault, runsDefault) {
+  return [
+    readRunCount("BENCH_WARMUP", warmupDefault, 0),
+    readRunCount("BENCH_RUNS", runsDefault, 1),
+  ];
+}
+
+function readRunCount(name, fallback, min) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min) {
+    // Exit rather than throw: this runs at module scope, before the scenario's
+    // `main().catch()` exists, so a throw would answer a typo'd env var with a
+    // stack trace. Matches how the scenarios report a missing corpus.
+    console.error(`${name} must be an integer >= ${min}, got ${JSON.stringify(raw)}`);
+    process.exit(1);
+  }
+  return value;
+}
+
 export function createFormatters(projectRoot, configDir) {
   const prettierBin = `${projectRoot}/node_modules/.bin/prettier`;
   const biomeBin = `${projectRoot}/node_modules/.bin/biome`;
