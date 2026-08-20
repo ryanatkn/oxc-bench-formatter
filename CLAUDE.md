@@ -440,16 +440,17 @@ lives:
 - **Directory discovery** (a `tsv format <dir>` arg, as the scenarios use): tsv
   recurses over the JS/TS family (`.ts`/`.mts`/`.cts`/`.js`/`.mjs`/`.cjs`),
   `.svelte`, and `.css`, and is gitignore-aware — inside a git repo it honors
-  `.gitignore` (hierarchically) plus a repo-root `.formatignore` /
-  `.prettierignore`, always pruning `.git`/`node_modules`; outside a repo it
-  applies a build-output heuristic (`dist`/`build`/`target` + hidden dirs) and
-  warns that a `.prettierignore` won't be read. Because tsv self-scopes by
+  `.gitignore` plus `.formatignore` / `.prettierignore`, all three hierarchically
+  (at any depth, not just the repo root), always pruning `.git`/`node_modules`;
+  outside a repo it applies a build-output heuristic (`dist`/`build`/`target` +
+  hidden dirs) and warns that a `.prettierignore` won't be read. Because tsv self-scopes by
   extension while the other three are scoped by config, **the corpus decides
   whether they agree** — on outline, tsv discovers exactly 1648 files
   (1339 `.ts` + 308 `.js` + 1 `.mjs`) and biome and oxfmt each self-report the same 1648. Preflight now asserts that agreement on every run rather than leaving it to
   a periodic hand-check, and `assertScopeConfigsAgree` checks the three scoping
   files name the same extensions before the corpus is even read. It holds _because_ outline has no `.svelte`/`.css` (which tsv would grab
-  and the JS/TS-scoped configs would skip) and no in-corpus `.prettierignore`
+  and the JS/TS-scoped configs would skip) and no in-corpus `.prettierignore` at
+  any depth
   (which tsv would honor and the others would not, since they're pointed at the
   scenario's own ignore file) — if either changes, the scenario aborts instead of
   publishing a lopsided comparison. (Note: tsv
