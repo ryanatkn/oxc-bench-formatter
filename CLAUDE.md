@@ -96,8 +96,9 @@ bench-<name>/
 ```
 
 `bench-svelte/` deviates from this shape: its only config is `oxfmtrc.json`
-(rsvelte-fmt's; tsv takes none), plus `setup-corpus.mjs` (builds `data/`) and a
-gitignored `repos/` clone cache — see "The rsvelte-fmt integration" below.
+(rsvelte-fmt's; tsv takes none), plus `setup-corpus.mjs` (builds `data/` from the
+sibling `../corpora` snapshot at a pinned commit) — see "The rsvelte-fmt integration"
+below.
 `bench-tsv-delivery/` deviates further: `bench.mjs` and `data/`, no configs at
 all, since both of its rows are tsv and tsv is non-configurable.
 
@@ -358,8 +359,9 @@ on a `pnpm-lock.yaml` bump. Two reasons, both of which corrupt the results:
   unavailable and `bench-large-single-file`, `bench-ts-only`, `bench-svelte`, and
   `bench-tsv-delivery` abort whole — the README loses those four scenarios
   entirely, not just their tsv rows (per-scenario errors are non-fatal, so the run still "succeeds"). CI also has
-  no `../kit`/`../svelte.dev` sibling checkouts, so the `bench-svelte` corpus can't
-  build there either. Nothing blocks teaching CI to build tsv now —
+  no `../corpora` sibling checkout (one public repo — a shallow fetch of the pinned
+  `CORPORA_COMMIT` would do; a plain `--depth=1` clone of HEAD would not have it), so the
+  `bench-svelte` corpus can't build there either. Nothing blocks teaching CI to build tsv now —
   `github.com/fuzdev/tsv` is public and the corpus no longer needs the private fuz
   repos — it just isn't wired up. Until it is, `update-readme.yml` **fails** rather
   than opening that PR: the script aborts up front on a missing tsv binary.
@@ -567,10 +569,10 @@ Candidates:
   outline/storybook/continue at their default-branch HEAD, unpinned, so the corpus
   drifts and a rerun months apart is not comparable — and outline is now cloned
   twice, which can land two different commits. `bench-large-single-file` already
-  pins (`v5.9.2`); the clones should too. `bench-svelte`'s five library clones
-  and two sibling checkouts are likewise unpinned, though its snapshot at least
-  freezes the corpus between regenerations and records source commits in
-  `data/`'s commit message. Until they are pinned, each scenario at least prints a
+  pins (`v5.9.2`); the clones should too. `bench-svelte` is the exception:
+  `setup-corpus.mjs` reads its seven sources from the fuzdev/corpora snapshot at a
+  pinned `CORPORA_COMMIT`, so that corpus reproduces from one SHA (and `data/`'s
+  commit message records each source's upstream commit). Until the rest are pinned, each scenario at least prints a
   `Corpus:` line (`describeCorpus`) naming the commit and date it ran against — or,
   for the single downloaded file, its size and content hash — so two runs can be
   told apart instead of silently differing.
@@ -602,15 +604,15 @@ formatters, on `.svelte` files only.
   and output volume comparable. This scenario set the precedent the other two
   tsv-inclusive ones now follow (see the style-parity note above).
 - **The corpus** (`setup-corpus.mjs`): a `.svelte`-only snapshot of seven
-  third-party sources. Sibling checkouts `../kit` (`packages/kit/src`) and
-  `../svelte.dev` (`apps/svelte.dev/src` + `packages/repl/src` +
-  `packages/site-kit/src`) — the same trees tsv's own bench corpus uses
-  (`../svelte` is absent on purpose: `packages/svelte/src` is the compiler,
-  zero `.svelte` files). Plus shallow clones, cached in the gitignored
-  `bench-svelte/repos/`, of five Svelte libraries: layerchart, svelte-ux,
-  flowbite-svelte, svelte-maplibre, layercake. Fixture pruning mirrors tsv's
-  perf-view corpus rules (`fixtures` segments anywhere, `samples` under a
-  `test` segment, hidden dirs). ~2,230 files / ~4.1MB, all third-party and
+  third-party sources, copied with `git archive` from the sibling `../corpora`
+  checkout ([fuzdev/corpora](https://github.com/fuzdev/corpora)) at a pinned
+  `CORPORA_COMMIT`: kit (`packages/kit/src`) and svelte.dev (`apps/svelte.dev/src`,
+  `packages/repl/src`, `packages/site-kit/src`) — the same trees tsv's own
+  bench corpus uses (`svelte` is absent on purpose: `packages/svelte/src` is the
+  compiler, zero `.svelte` files) — plus five Svelte libraries: layerchart,
+  svelte-ux, flowbite-svelte, svelte-maplibre, layercake. The snapshot already
+  leaves each upstream's test fixtures behind, so the only filter here is the
+  extension. ~2,230 files / ~4.1MB, all third-party and
   prettier-shaped — neither benched formatter is measured on code it already
   shaped, and both would rewrite ~92% of the files, so write volume is
   symmetric too.
@@ -618,8 +620,8 @@ formatters, on `.svelte` files only.
   differently (tsv is config-free and gitignore-aware; rsvelte-fmt walks
   `.svelte` itself and hands the rest of a directory to oxfmt, which would pick
   up `.json`/`.md`/etc), so a tree containing only the corpus files is the one
-  way to pin both to the same set — both self-report 2230, which preflight now
-  asserts every run. The
+  way to pin both to the same set — both self-report the same count (2,226 at the
+  current pin), which preflight now asserts every run. The
   `git init` makes `data/` its own git root (sidestepping the outer
   `.gitignore` trap described above) and provides the reset-per-run baseline;
   provenance (per-source commit + file count) is recorded in the snapshot's

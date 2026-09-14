@@ -1,5 +1,4 @@
 node_modules/
 
 bench-*/data/
-bench-svelte/repos/
 hyperfine-*/

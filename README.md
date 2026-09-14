@@ -54,7 +54,7 @@ node ./bench-svelte/bench.mjs
   - [Storybook](https://github.com/storybookjs/storybook) repository (mixed with embedded languages)
   - [Continue](https://github.com/continuedev/continue) repository (full features: sort imports + Tailwind CSS)
   - [Outline](https://github.com/outline/outline) again, scoped to its non-JSX subset (`.ts`/`.js`/`.mjs`) — the set every formatter including tsv supports (fork-added)
-  - A `.svelte`-only snapshot of seven third-party sources: SvelteKit, svelte.dev, layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake (fork-added)
+  - A `.svelte`-only snapshot of seven third-party sources: SvelteKit, svelte.dev, layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake — copied from the [fuzdev/corpora](https://github.com/fuzdev/corpora) snapshot at one pinned commit (fork-added)
   - The same `parser.ts` once more, its own copy, for the tsv delivery comparison — one file, so both rows are single-threaded and neither gains from core count (fork-added)
 - **Methodology**:
   - Multiple warmup runs before measurement

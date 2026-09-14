@@ -28,12 +28,12 @@ async function main() {
   checkGnuTime();
 
   console.log("");
-  // This is the one corpus that can't be fetched — it's built from sibling
-  // checkouts by setup-corpus.mjs — so name the fix instead of failing inside
-  // `git reset` with "not a git repository".
+  // This is the one corpus that can't be fetched — setup-corpus.mjs builds it
+  // from the sibling ../corpora snapshot — so name the fix instead of failing
+  // inside `git reset` with "not a git repository".
   if (!existsSync(`${dataDir}/.git`)) {
     console.error(
-      "bench-svelte corpus missing. Build it with `node ./bench-svelte/setup-corpus.mjs` (needs ../kit and ../svelte.dev checked out).",
+      "bench-svelte corpus missing. Build it with `node ./bench-svelte/setup-corpus.mjs` (needs a ../corpora checkout beside this repo).",
     );
     process.exit(1);
   }
