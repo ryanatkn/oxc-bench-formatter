@@ -2,11 +2,13 @@
 
 // What each way of installing tsv costs, rather than which formatter is fastest.
 //
-// tsv ships as more than one thing: a native binary (built from source, or
-// unpacked from the `@fuzdev/tsv-<triple>` platform package), and
+// tsv ships as more than one thing: the native binary from the
+// `@fuzdev/tsv-<triple>` platform package (or a local build via `TSV_BIN`); that
+// same binary reached through `@fuzdev/tsv`'s `tsv` bin, a Node dispatcher that
+// spawns it — the way `npx tsv` and most npm installs run it; and
 // `@fuzdev/tsv_wasm`, which runs the same CLI source over a WASM engine in Node
 // and is the universal fallback on platforms with no prebuilt binary. Same
-// formatter, same output — very different delivery.
+// formatter, same output — three very different deliveries.
 //
 // That question is deliberately kept out of the comparison scenarios. A row
 // belongs there if it is the honest counterpart to how the *other* tools in that
@@ -14,11 +16,13 @@
 // WASM row there would only muddle hyperfine's Summary ratios — mixing "which
 // formatter is faster" with "which tsv distribution is faster" in one list.
 //
-// One file, not a tree, for a reason: the WASM CLI is single-threaded (`--jobs`
-// is accepted for parity and ignored) and the native binary is not, so a
-// multi-file corpus would fold core count into what reads as engine cost. With a
-// single file the native binary clamps its worker pool to one, and both rows are
-// honestly single-threaded.
+// One file, not a tree, for a reason: the native binary parallelizes across
+// files with a thread pool and the WASM CLI (since tsv 0.3) with a worker pool
+// of its own, above a file-count threshold — two different pools with different
+// costs, so a multi-file corpus would fold core count and pool warm-up into what
+// reads as engine and delivery cost. With a single file the native binary clamps
+// its pool to one and the WASM CLI stays below its threshold, so every row is
+// honestly single-threaded: this is the fixed-cost comparison.
 
 import { execSync } from "child_process";
 
@@ -41,7 +45,7 @@ async function main() {
 
   const dataFile = "./data/parser.ts";
   const dataFileBak = "./data/parser.ts.bak";
-  // No config directory is used: both rows are tsv, which takes no config file
+  // No config directory is used: every row is tsv, which takes no config file
   // or flags. The argument is still passed for the shared signature.
   const formatters = createFormatters("..", ".");
 
@@ -63,22 +67,21 @@ async function main() {
   console.log("- Copy original before each run");
   console.log("");
 
-  // The two rows share one CLI source, so they share preflight's tsv matchers
+  // The three rows share one CLI source, so they share preflight's tsv matchers
   // and must report identical counts — which makes the scope cross-check here a
-  // real assertion that both are formatting the same file, not two spellings of
-  // one tool trivially agreeing.
+  // real assertion that all of them are formatting the same file, not three
+  // spellings of one tool trivially agreeing. The npm row's preflight also
+  // catches the dispatcher falling back to the JS CLI, which would otherwise be
+  // timed under the wrong name.
   await runPreflight([
     { name: "tsv-wasm", command: formatters.check["tsv-wasm"](dataFile) },
+    { name: "tsv-npm", command: formatters.check["tsv-npm"](dataFile) },
     { name: "tsv", command: formatters.check.tsv(dataFile) },
   ]);
 
   // No --ignore-failure, as in every tsv scenario: preflight has ruled out the
   // corpus reasons either row would exit non-zero, so what's left is a real
   // crash and must fail the scenario rather than be timed as a fast partial run.
-  //
-  // When `@fuzdev/tsv` publishes, its `tsv` bin — a Node dispatcher that
-  // spawnSyncs the platform package's native binary — belongs here as a third
-  // row, measuring the Node cold start that the native row doesn't pay.
   //
   // Native tsv runs last, as it does in every other tsv scenario: hyperfine runs
   // the commands in the order given without interleaving, so on a laptop that
@@ -91,8 +94,10 @@ async function main() {
     prepareCmd,
     "--shell=bash",
     "-n=tsv-wasm",
+    "-n=tsv-npm",
     "-n=tsv",
     formatters["tsv-wasm"](dataFile),
+    formatters["tsv-npm"](dataFile),
     formatters.tsv(dataFile),
   ]);
 
@@ -101,6 +106,11 @@ async function main() {
       {
         name: "tsv-wasm",
         command: formatters["tsv-wasm"](dataFile),
+        prepare: prepareCmd,
+      },
+      {
+        name: "tsv-npm",
+        command: formatters["tsv-npm"](dataFile),
         prepare: prepareCmd,
       },
       {

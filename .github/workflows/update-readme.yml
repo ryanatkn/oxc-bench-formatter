@@ -1,13 +1,14 @@
 name: Update README
 
-# Manual only. This job cannot produce a complete result: it does not build tsv,
-# so the tsv legs of bench-large-single-file and bench-ts-only error out and the
-# README loses them. It also runs on a GitHub runner, whose core count differs
-# sharply from a dev machine's — and since biome, oxfmt, and tsv all scale with
-# cores while prettier does not, the ratios move with the hardware. Results are
-# only comparable when every row comes from one machine, so the README is
-# regenerated deliberately (`pnpm run update-readme` locally, where ../tsv exists)
-# rather than automatically on a lockfile bump.
+# Manual only, and the PR it opens is not auto-merged. The run itself is
+# complete now — tsv installs from npm and the bench-svelte corpus is fetched at
+# its pin — but it runs on a GitHub runner, whose core count differs sharply from
+# a dev machine's, and since biome, oxfmt, and tsv all scale with cores while
+# prettier does not, the ratios move with the hardware. Results are only
+# comparable when every row comes from one machine, so the README is normally
+# regenerated deliberately (`pnpm run update-readme` locally) rather than on a
+# lockfile bump, and a runner-generated PR is reviewed as a whole-README swap,
+# never merged as a refresh of a few rows.
 on:
   workflow_dispatch:
 
@@ -65,6 +66,10 @@ jobs:
         with:
           tool: hyperfine
 
+      # GNU time, for the memory rows — the README consumer refuses a scenario
+      # without a memory section, so this is required here.
+      - run: sudo apt-get install -y time
+
       - run: vp run update-readme
 
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
@@ -75,11 +80,8 @@ jobs:
           delete-branch: true
           title: "chore: update benchmark results in README"
           commit-message: "chore: update benchmark results in README"
-          body: Automated benchmark results update triggered by a change to `pnpm-lock.yaml`.
+          body: |
+            Benchmark results regenerated on a GitHub runner by a manual dispatch.
+            Every row comes from that runner, so the README is comparable within
+            itself — but not with rows measured elsewhere. Review as a whole swap.
           add-paths: README.md
-
-      - if: steps.cpr.outputs.pull-request-number
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
-        run: gh pr merge --squash --auto --delete-branch "$PR_NUMBER"

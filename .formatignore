@@ -1,0 +1,16 @@
+# Read by tsv only (`tsv format`); vp/oxfmt format this repo's own sources.
+#
+# The outer .gitignore ignores every bench-*/data/ corpus, and as of tsv 0.3 a
+# file named on the command line is bounded by the ignore files too: one they
+# exclude is skipped with a warning and exit 0, not formatted. The multi-file
+# corpora are their own git roots, so the outer .gitignore never reaches them —
+# but the two single-file scenarios pass ./data/parser.ts explicitly, under this
+# repo's root, and would format nothing. Re-include exactly those two files, in
+# the order tsv's own warning prescribes (un-ignore the directory, re-ignore its
+# contents, un-ignore the one file), so nothing else under data/ comes back.
+!/bench-large-single-file/data/
+/bench-large-single-file/data/*
+!/bench-large-single-file/data/parser.ts
+!/bench-tsv-delivery/data/
+/bench-tsv-delivery/data/*
+!/bench-tsv-delivery/data/parser.ts

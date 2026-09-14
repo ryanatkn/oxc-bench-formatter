@@ -8,6 +8,9 @@ catalog:
 minimumReleaseAgeExclude:
   - "@oxfmt/*"
   - oxfmt
+  # tsv is published in lockstep with its platform packages; a bench that pins the
+  # newest release shouldn't wait out the release-age window for it either.
+  - "@fuzdev/*"
 overrides:
   vite: "catalog:"
   vitest: "catalog:"

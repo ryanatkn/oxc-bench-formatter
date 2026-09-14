@@ -34,9 +34,10 @@ jobs:
           repository: outline/outline
           path: bench-js-no-embedded/data
       # bench-ts-only benches the same repo scoped to its non-JSX subset, in its
-      # own checkout so each scenario resets its tree independently. tsv itself is
-      # not built here, so that scenario's tsv leg errors and is skipped (per-scenario
-      # errors are non-fatal); the other four formatters still run.
+      # own checkout so each scenario resets its tree independently. tsv comes
+      # from npm (@fuzdev/tsv's platform package, installed with the rest), so
+      # every tsv scenario runs here too; bench-svelte's corpus is fetched from
+      # the pinned fuzdev/corpora commit by init.sh.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -59,5 +60,8 @@ jobs:
       - uses: taiki-e/install-action@82cd3e7658a6f96c86c0234aeeda1748937cb0a1 # v2.85.13
         with:
           tool: hyperfine
+
+      # GNU time, for the memory rows (skipped with a notice when absent).
+      - run: sudo apt-get install -y time
 
       - run: vp run bench

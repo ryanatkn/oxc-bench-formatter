@@ -21,9 +21,12 @@ A benchmark suite comparing JS/TS formatters on **execution time** (via
 - **rsvelte-fmt** (`rsvelte-fmt`) — `@rsvelte/fmt`, Rust Svelte formatter that
   formats `.svelte` in-process and delegates other files to oxfmt; runs only in
   `bench-svelte`, head-to-head with tsv. Also fork-added.
+- **tsv-npm** (`@fuzdev/tsv`'s `tsv` bin) — the same native binary reached
+  through the package's Node dispatcher, the way `npx tsv` and most npm installs
+  run it. Runs only in `bench-tsv-delivery`, against native tsv. Also fork-added.
 - **tsv-wasm** (`@fuzdev/tsv_wasm`) — the same tsv CLI source over a WASM engine
-  in Node, single-threaded; the distribution anyone without a prebuilt native
-  binary installs. Runs only in `bench-tsv-delivery`, against native tsv. Also
+  in Node; the distribution anyone on a platform without a prebuilt native binary
+  falls back to. Runs only in `bench-tsv-delivery`, against native tsv. Also
   fork-added.
 
 This suite measures the whole **CLI** (process spawn + I/O + multi-file parallel
@@ -44,8 +47,9 @@ runs `vp staged`. Package manager is pnpm 11.4.0; Node is pinned to `24`.
 What a merge from `oxc-project/bench-formatter` has to reconcile. Everything else
 is upstream's, untouched.
 
-- **Three formatters added**: tsv (native binary, `TSV_BIN`), rsvelte-fmt, and
-  tsv-wasm.
+- **Three formatters added**: tsv (the native binary from `@fuzdev/tsv`'s
+  platform package, or `TSV_BIN`), rsvelte-fmt, and tsv-wasm — plus a tsv-npm
+  row that is tsv again through its npm dispatcher.
 - **Three scenarios added**: `bench-ts-only`, `bench-svelte`,
   `bench-tsv-delivery` — plus their entries in `bench-all.mjs` and `init.sh`.
 - **`bench-large-single-file`** (upstream's) gained a tsv row, a preflight pass,
@@ -58,9 +62,11 @@ is upstream's, untouched.
   ratio to the lowest-memory formatter.
 - **`shared/utils.mjs`** carries the fork-owned preflight, scope, and provenance
   machinery; `preflight-selftest.mjs` (run first by `bench-all.mjs`) guards it.
-- **Tooling**: `.node-version` pinned to 24, `@rsvelte/fmt` and
-  `@fuzdev/tsv_wasm` added, `vite-plus`
-  pinned in the catalog (see the comment in `pnpm-workspace.yaml`).
+- **Tooling**: `.node-version` pinned to 24, `@rsvelte/fmt`, `@fuzdev/tsv` and
+  `@fuzdev/tsv_wasm` added (with `@fuzdev/*` excluded from pnpm's release-age
+  wait), `vite-plus` pinned in the catalog (see the comment in
+  `pnpm-workspace.yaml`), and a root `.formatignore` that re-includes the two
+  single-file corpora for tsv (see "Why the corpus must stay a git repo").
 
 ## Layout
 
@@ -101,7 +107,7 @@ is pinned) and `setup-corpus.mjs` (builds `data/` from the fuzdev/corpora snapsh
 at that pin, out of a sibling `../corpora` checkout or a gitignored `corpora/`
 fetch cache) — see "The rsvelte-fmt integration" below.
 `bench-tsv-delivery/` deviates further: `bench.mjs` and `data/`, no configs at
-all, since both of its rows are tsv and tsv is non-configurable.
+all, since all of its rows are tsv and tsv is non-configurable.
 
 ## The harness — `shared/utils.mjs`
 
@@ -112,9 +118,13 @@ all, since both of its rows are tsv and tsv is non-configurable.
   - `biome(files)` → `biome format --write --files-ignore-unknown=true --config-path <dir> <files>`
   - `oxfmt(files)` → `oxfmt --config <dir>/oxfmtrc.json <files>`
   - `tsv(files)` → `<tsvBin> format <files>` — the **odd one out**: a native Rust
-    binary, not an npm `.bin`. `tsvBin` is `TSV_BIN` or defaults to
-    `<projectRoot>/../tsv/target/release/tsv`. No config file or flags (tsv is
+    binary, not an npm `.bin`. `tsvBin` comes from `resolveTsv`: `TSV_BIN` if set,
+    else the `tsv` binary inside the `@fuzdev/tsv-<triple>` platform package that
+    `@fuzdev/tsv` installed for this machine (resolved from that package's real
+    location, since pnpm doesn't hoist it). No config file or flags (tsv is
     non-configurable); directory args recurse over `.ts`/`.svelte`/`.css` only.
+  - `"tsv-npm"(files)` → `node <projectRoot>/node_modules/@fuzdev/tsv/bin.js format <files>`
+    — the same binary through its npm dispatcher; `bench-tsv-delivery` only.
   - `rsvelte(files)` → `… --config <dir>/oxfmtrc.json <files>` — the
     `@rsvelte/fmt` npm bin (a Node launcher that execs a platform-native binary
     and points it at the project's oxfmt for non-`.svelte` files). Configurable,
@@ -146,7 +156,7 @@ all, since both of its rows are tsv and tsv is non-configurable.
 | `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)      | `git reset --hard` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt      |
 | `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset (`.ts`/`.js`/`.mjs`) | `git reset --hard` (its own outline checkout)                      | 2 × 5         | all 5 (incl. tsv)        |
 | `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section)     | `git reset --hard` (snapshot repo built by `setup-corpus.mjs`)     | 2 × 5         | tsv, rsvelte-fmt         |
-| `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                       | `cp parser.ts.bak parser.ts`                                       | 2 × 5         | tsv, tsv-wasm            |
+| `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                       | `cp parser.ts.bak parser.ts`                                       | 2 × 5         | tsv, tsv-npm, tsv-wasm   |
 
 **Quick runs**: the four tsv scenarios (`bench-large-single-file`,
 `bench-ts-only`, `bench-svelte`, `bench-tsv-delivery`) take
@@ -219,8 +229,9 @@ files out and carry on: the formatters are scoped by three separate mechanisms
 mid-run would mean generating per-run configs and publishing numbers for a corpus
 that no longer matches its own description. A corpus one formatter can't take is a
 corpus to fix, not to quietly shrink. Consequence worth knowing: on a machine
-without the tsv binary (CI), all four tsv scenarios abort
-whole rather than losing just the tsv row.
+where the tsv binary is missing (a platform `@fuzdev/tsv` ships no package for,
+and no `TSV_BIN`), all four tsv scenarios abort whole rather than losing just
+the tsv row.
 
 If the no-op check ever fires legitimately — a corpus that genuinely is already in
 some formatter's style — the fix is a different corpus, not a relaxed check: benching
@@ -280,15 +291,18 @@ the machine (`update-readme` records it under `## Versions`; see the README's
 "How to read these numbers").
 
 Separating engine from thread count: comparing hyperfine's `[User: …]` times
-instead of wall times is the parallelism-neutral view — on `bench-ts-only` tsv is
-~3x oxfmt in wall-clock but ~2x in CPU work, the rest being cores oxfmt left idle.
-**But User time is only a clean engine proxy while threads do real work.**
-`bench-large-single-file` is _not_ the controlled single-thread exception it looks
-like: with one file to format, tsv clamps its worker count to the file count (User
-< wall, genuinely one thread) and biome likewise stays single-threaded, but **oxfmt
-still spins up a pool it cannot use** — it reports ~455ms User against ~235ms wall.
-That overhead inflates its User time without being formatting work, so neither the
-wall nor the CPU-work comparison in that scenario is engine-vs-engine.
+instead of wall times is the parallelism-neutral view — on `bench-ts-only` the
+wall-clock ratio between two parallel tools and their CPU-work ratio differ by
+however many cores one of them left idle. **But User time is only a clean engine
+proxy while threads do real work.** `bench-large-single-file` is _not_
+automatically the controlled single-thread exception it looks like: with one file
+to format, tsv clamps its worker count to the file count (User < wall, genuinely
+one thread), but a tool that spins up a pool it cannot use reports User well
+_above_ wall on that one file — overhead that inflates its User time without
+being formatting work, so neither the wall nor the CPU-work comparison is
+engine-vs-engine for it. Which tools do that changes between versions (oxfmt did
+in an earlier release), so read the tell — User against wall, per row — off each
+regenerated README rather than from memory.
 
 **Every formatter tsv competes against is pinned to tsv's style.** tsv is
 non-configurable — width 100, tabs, single quotes, no trailing commas — and it
@@ -299,7 +313,7 @@ profile for prettier, prettier+oxc-parser, biome, oxfmt, and rsvelte-fmt, in eac
 tool's own dialect: prettier/oxfmt take `printWidth` + `useTabs` + `singleQuote` +
 `trailingComma`, biome takes `formatter.lineWidth` + `indentStyle` and
 `javascript.formatter.quoteStyle` + `trailingCommas`. `bench-tsv-delivery` needs
-none of it — both of its rows are tsv, at tsv's one style by construction.
+none of it — all of its rows are tsv, at tsv's one style by construction.
 
 The alternative — leaving each tool on its defaults (width 80) while tsv formats at
 100 — meant they were making different break decisions and rewriting different
@@ -330,49 +344,45 @@ time** (`apt install time` → `/usr/bin/time`; macOS `brew install gnu-time` �
 `gtime`). Without GNU time the timing benchmarks still run; only memory is
 skipped.
 
-`update-readme` rebuilds tsv, scrapes stdout from `vp run bench`, replaces the
-block between `<!-- BENCHMARK_RESULTS_START -->` / `<!-- BENCHMARK_RESULTS_END -->`
-in `README.md`, and refreshes the `## Versions` section. The
+`update-readme` scrapes stdout from `vp run bench`, replaces the block between
+`<!-- BENCHMARK_RESULTS_START -->` / `<!-- BENCHMARK_RESULTS_END -->` in
+`README.md`, and refreshes the `## Versions` section. The
 prettier/biome/oxfmt/rsvelte-fmt versions come from `vp exec <bin> --version`;
-tsv's from `$TSV_BIN --version` — it's a native binary, so `vp exec` can't reach
-it, and asking the binary rather than `../tsv/Cargo.toml` means the published
-version names the build that was actually measured. tsv-wasm's comes from its
-installed `package.json`: an npm package, but one whose bin can't be addressed by
-name (see the tsv-wasm section) and whose CLI has no `--version`. CI
-(`.github/workflows/ci.yml`) runs `vp run bench` on push/PR as a smoke test.
+tsv's from the resolved binary's `--version` — it's a native binary, so `vp exec`
+can't reach it, and asking the binary means the published version names the
+build that was actually measured. When that binary is the platform package's,
+the version is cross-checked against the package's own and the run refuses to
+publish a mismatch, and the line names the package (`0.3.0
+(@fuzdev/tsv-linux-x64-gnu)`); with `TSV_BIN` it names the binary's mtime
+instead, since a local build's version string doesn't move between builds.
+tsv-wasm's comes from its installed `package.json`: an npm package, but one
+whose bin can't be addressed by name (see the tsv-wasm section) and whose CLI
+has no `--version`. CI (`.github/workflows/ci.yml`) runs `vp run bench` on
+push/PR as a smoke test, tsv scenarios included.
 
-**The rebuild is the publish path's job because nothing else does it.**
-`bench-all.mjs` runs `init.sh` only when a corpus is missing, and `init.sh` builds
-tsv only when the binary is _absent_ — it never refreshes a stale one, deliberately,
-so a pinned copy isn't overwritten. Fine while iterating; on the publish path it
-meant benching last week's build under this week's version string. So
-`update-readme` runs `cargo build --release -p tsv_cli --manifest-path
-../tsv/Cargo.toml` first (a no-op when current), skips that when `TSV_BIN` is set
-explicitly (pinning a fixed binary is what that path is for), and in either case
-aborts up front if the resolved binary isn't executable — rather than letting the
-four tsv scenarios abort one at a time and drop out of the README unremarked.
+**Nothing builds tsv any more.** The binary is `@fuzdev/tsv`'s platform package,
+installed by `pnpm install` and pinned by the lockfile like every other
+formatter; `init.sh` only confirms it resolves, and `update-readme` aborts up
+front if it isn't executable — rather than letting the four tsv scenarios abort
+one at a time and drop out of the README unremarked. `TSV_BIN` benches a local
+build as-is (see "Setting up the tsv binary").
 
 **Heads-up — regenerate the README locally, on one machine.** `update-readme.yml`
 is **`workflow_dispatch` only**; it deliberately does _not_ auto-refresh the README
 on a `pnpm-lock.yaml` bump. Two reasons, both of which corrupt the results:
 
-- **CI has no tsv.** Neither workflow builds it, so preflight finds the binary
-  unavailable and `bench-large-single-file`, `bench-ts-only`, `bench-svelte`, and
-  `bench-tsv-delivery` abort whole — the README loses those four scenarios
-  entirely, not just their tsv rows (per-scenario errors are non-fatal, so the run still "succeeds"). The
-  `bench-svelte` corpus is no longer a second blocker: with no `../corpora` sibling,
-  `setup-corpus.mjs` fetches the pinned commit from GitHub itself. Nothing blocks
-  teaching CI to build tsv now — `github.com/fuzdev/tsv` is public and the corpus
-  needs no private repos — it just isn't wired up. Until it is, `update-readme.yml`
-  **fails** rather than opening that PR: the script aborts up front on a missing
-  tsv binary.
 - **Core count changes the answer.** biome, oxfmt, and tsv scale with cores while
   prettier is effectively serial, so a runner's ratios and a dev box's ratios are
   different numbers, not noisy versions of the same one. A README mixing rows from
   both is not internally comparable.
+- **CI can now run everything** — tsv installs from npm and the `bench-svelte`
+  corpus fetches itself at its pin — so `update-readme.yml` no longer fails on a
+  missing binary; it opens the PR **without auto-merging it**. A runner-generated
+  README is comparable within itself, so review it as a whole swap, never as a
+  refresh of a few rows.
 
-So regenerate with `pnpm run update-readme` **locally**, where `../tsv` exists, and
-keep every row from one machine.
+So regenerate with `pnpm run update-readme` **locally**, and keep every row from
+one machine.
 
 **Merging upstream conflicts the README every time upstream reruns.** Take _this
 fork's_ block wholesale — upstream's numbers come from their machine and carry no
@@ -402,8 +412,8 @@ numbers, but it does fail: pair a format change with a fix there.
   `shared/utils.mjs`, then add a `-n=<name>` arg + command to each scenario's
   `runHyperfine([...])` call and a matching entry in its `runMemoryBenchmarks`
   list. If it's a native binary rather than an npm `.bin` (as tsv is), resolve
-  it via an env-var override with a sibling-checkout default, teach `init.sh` to
-  build/locate it, and source its version from the binary itself (not
+  it from its platform package with an env-var override for local builds (see
+  `resolveTsv`), and source its version from the binary itself (not
   `vp exec … --version`, which only reaches npm bins) in
   `bench-all-and-update-readme.mjs`.
 - **A formatter in a preflight scenario needs three more entries**, all in
@@ -431,12 +441,15 @@ numbers, but it does fail: pair a format change with a fix there.
 formatter — the defining difference between this fork and upstream. Where it
 lives:
 
-- **Binary**: `tsv` from the `tsv_cli` crate — `cargo build -p tsv_cli
---release` → `target/release/tsv`. It's a native Rust binary, not an npm
-  `.bin`, so `createFormatters` resolves it via `TSV_BIN` (default
-  `<projectRoot>/../tsv/target/release/tsv`) rather than `node_modules/.bin`.
-  `init.sh` builds it if missing and `../tsv` is present (full setup, including
-  the copy-in path, under "Setting up the tsv binary" below).
+- **Binary**: `tsv` from the `tsv_cli` crate, as shipped in the
+  `@fuzdev/tsv-<triple>` platform package that `@fuzdev/tsv` pulls in for this
+  machine — the same `cargo build --locked -p tsv_cli --release` (LTO, one
+  codegen unit, abort, stripped) a local build makes, which an A/B against a
+  build of the same tag confirmed within run-to-run noise. It's a native Rust
+  binary, not an npm `.bin`, so `createFormatters` resolves it via `resolveTsv`
+  (`TSV_BIN`, else the platform package) rather than `node_modules/.bin` (full
+  detail, including the local-build path, under "Setting up the tsv binary"
+  below).
 - **In-place, non-configurable**: `tsv format <paths>` writes only when output
   differs and takes no config file or flags — it slots straight into the
   reset-then-format-then-measure loop.
@@ -487,52 +500,50 @@ lives:
   `.git` and tsv's format root becomes the bench-formatter repo, which _does_
   ignore `bench-*/data/`, so discovery returns **zero** files. Any future
   copied/generated corpus must therefore `git init` (the old harvested `.ts`
-  snapshot did exactly that). `bench-large-single-file` sidesteps the same trap
-  differently:
-  it passes the file (`./data/parser.ts`) explicitly, and an explicit file arg
-  bypasses the ignore files — a `tsv format ./data` _directory_ arg there would
-  be pruned by the outer `.gitignore`. Both confirmed via `--list`.
+  snapshot did exactly that). `bench-large-single-file` and `bench-tsv-delivery`
+  sit in the same trap and are dug out differently: they pass the file
+  (`./data/parser.ts`) explicitly, and **as of tsv 0.3 a named file is bounded
+  by the ignore files too** — one they exclude is skipped with a warning and
+  exit 0, not formatted (0.2 formatted a named file regardless). So the
+  repo-root `.formatignore` re-includes exactly those two files, in the order
+  tsv's own warning prescribes (un-ignore the directory, re-ignore its contents,
+  un-ignore the file). Without it every tsv distribution reports `0 would
+change, 0 unchanged` on that corpus, which preflight's no-op check turns into
+  an abort rather than a 1 ms "win". All confirmed via `--list`.
 - **Version**: `tsv --version`, asked of the binary by
-  `bench-all-and-update-readme.mjs` — which also rebuilds it first (see Running,
-  above).
+  `bench-all-and-update-readme.mjs`, cross-checked against the platform
+  package's version (see Running, above).
 
 ### Setting up the tsv binary
 
-The harness resolves tsv from `TSV_BIN`, falling back to
-`../tsv/target/release/tsv`. Two ways to get a usable binary in place:
+`resolveTsv` in `shared/utils.mjs` picks the binary: `TSV_BIN` if set, else the
+platform package. Two ways to get one in place:
 
-- **Sibling checkout (default — `init.sh` automates it):** keep the tsv repo at
-  `~/dev/tsv`. `init.sh` (run directly, or by `pnpm run bench` when data is
-  missing) builds it when the resolved path isn't executable:
+- **npm (default):** `pnpm install` installs `@fuzdev/tsv` and, as its optional
+  dependency, the one `@fuzdev/tsv-<triple>` package for this machine, which
+  carries the `tsv` binary beside the N-API addon. Nothing to build; the version
+  is whatever the lockfile pins. `init.sh` only confirms it resolves. Note pnpm
+  keeps it under `node_modules/.pnpm/`, not hoisted to `node_modules/@fuzdev/`,
+  which is why `resolveTsv` resolves it from `@fuzdev/tsv`'s real location the
+  way the package's own `bin.js` does.
 
-  ```bash
-  cargo build --release -p tsv_cli --manifest-path ../tsv/Cargo.toml
-  ```
-
-  No copying — the default `TSV_BIN` points straight at the sibling's `target/`.
-
-- **Copy a prebuilt binary in (when `../tsv` isn't a sibling, or to pin a fixed
-  build):** build it once in the tsv repo, copy the binary somewhere stable, and
-  point the harness at it via `TSV_BIN`:
+- **A local build (a dev branch, or a platform the package doesn't ship for):**
+  build it in a tsv checkout and point the harness at it:
 
   ```bash
   # in the tsv repo
   cargo build --release -p tsv_cli          # → target/release/tsv
-  cp target/release/tsv /some/stable/path/tsv
 
-  # then run the bench against the copy
-  TSV_BIN=/some/stable/path/tsv pnpm run bench
+  # then run the bench against it
+  TSV_BIN=../tsv/target/release/tsv pnpm run bench
   ```
 
-  `init.sh` treats an executable `$TSV_BIN` as already-present — it won't rebuild
-  or overwrite it — so the copy is used as-is. It's an ordinary dynamically-linked
-  Rust binary: fine to move within the same OS/arch, not a portable static build.
-  `update-readme` treats it the same way — it won't rebuild or overwrite an
-  explicit `TSV_BIN` — and reads the version from the binary, so this path names
-  its real version with no sibling `../tsv` present. One wrinkle: the
-  `(binary built …)` suffix on that version line is the file's mtime, which for a
-  copied binary is when it was **copied**, not when it was built (`cp -p`
-  preserves the build time).
+  `TSV_BIN` is used as-is — nothing rebuilds or overwrites it — and
+  `update-readme` reads the version from the binary and stamps the line with
+  the file's mtime, since a local build's version string doesn't move between
+  builds. That mtime is the file's, so for a copied binary it is when it was
+  **copied**, not built (`cp -p` preserves the build time). A README generated
+  this way names an unreleased build; regenerate from npm before publishing.
 
 ### Future tsv work (planned, not yet done)
 
@@ -541,20 +552,14 @@ formats `.css`, and that parser is **not yet exercised** by any scenario.
 Candidates:
 
 - A CSS corpus so tsv's CSS parser gets benchmarked.
-- **A `tsv-npm` row in `bench-tsv-delivery`, and native tsv from npm.** When
-  `@fuzdev/tsv` publishes, its `tsv` bin (a Node dispatcher that `spawnSync`s the
-  platform package's native binary) is the third delivery path, and the one most
-  users get — it pays a Node cold start the native row doesn't. The same release
-  also lets the _native_ binary come from `@fuzdev/tsv-<triple>` instead of a
-  sibling `../tsv` build: version-pinned like every other formatter here, and
-  installable on CI, which is most of what keeps the tsv scenarios off the
-  runners today. `TSV_BIN` would stay the override for benching a dev build.
 - **A multi-file leg for `bench-tsv-delivery`.** It benches one file on purpose —
-  the WASM CLI is single-threaded and the native binary is not, so a tree would
-  fold core count into what reads as engine cost. A second, clearly-labelled
-  multi-file row would measure the thing that single file can't: what the
-  fallback costs on a real project, where losing the worker pool matters as much
-  as the engine does.
+  the native binary's thread pool and the WASM CLI's worker pool (tsv 0.3+,
+  above a file-count threshold) have different costs, so a tree would fold core
+  count and pool warm-up into what reads as delivery cost. A second,
+  clearly-labelled multi-file row would measure the thing one file can't: what
+  each distribution costs on a real project. The corpus would need enough files
+  to clear the WASM CLI's threshold (`WORKER_FILE_THRESHOLD` in its `cli.js`), or
+  it silently measures the single-threaded path.
 - tsv-scoped variants of the embedded scenarios (`bench-mixed-embedded`,
   `bench-full-features`) — i.e. narrowing those corpora to tsv's supported set
   rather than leaving tsv out of them entirely.
@@ -676,9 +681,9 @@ formatters, on `.svelte` files only.
 
 [`@fuzdev/tsv_wasm`](https://www.npmjs.com/package/@fuzdev/tsv_wasm) is the third
 fork-added formatter, and the only one that isn't a different _formatter_ at all:
-it is tsv's own CLI over a WASM engine, the distribution anyone without a
-prebuilt native binary installs. It runs in one scenario, `bench-tsv-delivery`,
-against native tsv.
+it is tsv's own CLI over a WASM engine, the distribution anyone on a platform
+without a prebuilt native binary falls back to. It runs in one scenario,
+`bench-tsv-delivery`, against native tsv and the tsv-npm row (next section).
 
 - **The question it answers** is what a delivery path costs, not which formatter
   is faster — so it is deliberately kept out of the comparison scenarios. A row
@@ -699,10 +704,13 @@ against native tsv.
   and an error signal that also catches Node's own `Cannot find module` — the
   failure mode a path-addressed script has and a bin doesn't). It still carries
   its own `preflight-selftest.mjs` case.
-- **Single-threaded**: `--jobs` is accepted for drop-in parity and ignored. This
-  is why the scenario benches **one file**: the native binary clamps its worker
-  pool to the file count, so at one file both rows are honestly single-threaded,
-  where a tree would fold core count into what reads as engine cost.
+- **A worker pool of its own since tsv 0.3**: `--jobs` fans multi-file runs onto
+  `node:worker_threads` once a run clears a file-count threshold; on one file it
+  is a single thread. This is why the scenario benches **one file**: the native
+  binary clamps its pool to the file count and the WASM CLI stays under its
+  threshold, so every row is honestly single-threaded and the comparison is the
+  fixed cost of each delivery, where a tree would fold core count and two
+  different pools' warm-up into what reads as engine cost.
 - **Reading its numbers**: `[User: …]` is not an engine proxy here. Node compiles
   the WASM module on background threads, so the wasm row's User time can run well
   above its wall time even on a single file, and by a margin that varies run to
@@ -717,3 +725,26 @@ against native tsv.
   native binary has the flag and no manifest.
 - **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-tsv-delivery/bench.mjs`,
   as in the other three tsv scenarios.
+
+## The tsv-npm row (bench-tsv-delivery)
+
+The third row of `bench-tsv-delivery` is not another build of tsv but another
+way of reaching the same native binary: [`@fuzdev/tsv`](https://www.npmjs.com/package/@fuzdev/tsv)'s
+`tsv` bin, a Node dispatcher that resolves the platform package's binary and
+`spawnSync`s it, forwarding argv, stdio, exit codes and signals verbatim. It is
+how `npx tsv` and most npm installs run tsv, so it is the delivery most users pay
+for: one Node cold start plus a spawn on top of the native row.
+
+- **Binary**: `node <projectRoot>/node_modules/@fuzdev/tsv/bin.js` — addressed
+  by path for the same reason the WASM row is (both packages claim the `tsv` bin
+  name). The binary it dispatches to is the very file the tsv row runs directly.
+- **Preflight**: shares all three of tsv's table entries, since the dispatcher
+  forwards the binary's output unchanged, plus one signal of its own: the
+  warning the dispatcher prints when it cannot run the native binary and falls
+  back to the JS CLI. Without that, a broken platform package would be timed as
+  the wrong distribution under this row's name. It has its own self-test case.
+- **Reading its numbers**: the difference between this row and the tsv row is
+  the dispatch cost, and nothing else — same binary, same file, same thread
+  count. Its memory row is the Node process plus the child.
+- **Version**: the platform package's, which is `@fuzdev/tsv`'s — the same
+  version the tsv row publishes.

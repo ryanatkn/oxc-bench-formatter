@@ -1,10 +1,60 @@
 import { execSync, spawn } from "child_process";
 import { createHash } from "crypto";
-import { existsSync, readFileSync, statSync } from "fs";
-import { dirname, relative, resolve } from "path";
+import { createRequire } from "module";
+import { existsSync, readFileSync, realpathSync, statSync } from "fs";
+import { dirname, join, relative, resolve } from "path";
 import { fileURLToPath } from "url";
 
 const FORMATTER_NAMES = ["prettier", "prettier+oxc-parser", "biome", "oxfmt"];
+
+/**
+ * The native tsv binary to bench, and where it came from.
+ *
+ * `TSV_BIN` wins when set — that is how a dev build or a pinned copy is benched.
+ * Otherwise the binary is the one `@fuzdev/tsv` installed for this machine: its
+ * platform package (`@fuzdev/tsv-<triple>`) ships the same `tsv_cli` binary its
+ * release workflow builds with the release profile a local build uses, so the
+ * measured artifact is the published one, version-pinned by the lockfile like
+ * every other formatter here and installable on CI. pnpm installs only the
+ * matching optional dependency and does not hoist it, so it is resolved the way
+ * the package's own `bin.js` does — from the real location of `@fuzdev/tsv`,
+ * trying each platform package it declares — rather than by guessing a triple.
+ *
+ * Always returns a path: when nothing resolves, one that does not exist under the
+ * package's directory, so a scenario's preflight reports tsv unavailable with a
+ * path in the message rather than running whatever `tsv` is on PATH.
+ */
+export function resolveTsv(projectRoot) {
+  if (process.env.TSV_BIN) {
+    return { bin: process.env.TSV_BIN, source: "TSV_BIN" };
+  }
+  const packageJson = `${projectRoot}/node_modules/@fuzdev/tsv/package.json`;
+  let manifest;
+  let realPath;
+  try {
+    realPath = realpathSync(packageJson);
+    manifest = JSON.parse(readFileSync(realPath, "utf8"));
+  } catch {
+    return { bin: `${projectRoot}/node_modules/@fuzdev/tsv/<not installed>/tsv`, source: null };
+  }
+  const require = createRequire(realPath);
+  const exe = process.platform === "win32" ? "tsv.exe" : "tsv";
+  for (const name of Object.keys(manifest.optionalDependencies ?? {})) {
+    let bin;
+    try {
+      bin = join(dirname(require.resolve(name)), exe);
+    } catch {
+      continue;
+    }
+    if (existsSync(bin)) {
+      return { bin, source: `${name}@${manifest.optionalDependencies[name]}` };
+    }
+  }
+  return {
+    bin: `${dirname(realPath)}/<no platform package for ${process.platform}-${process.arch}>/tsv`,
+    source: null,
+  };
+}
 
 export { FORMATTER_NAMES };
 
@@ -52,21 +102,26 @@ export function createFormatters(projectRoot, configDir) {
   const prettierBin = `${projectRoot}/node_modules/.bin/prettier`;
   const biomeBin = `${projectRoot}/node_modules/.bin/biome`;
   const oxfmtBin = `${projectRoot}/node_modules/.bin/oxfmt`;
-  // tsv is a native Rust binary from the sibling tsv repo, not an npm bin.
-  // Override with the TSV_BIN env var; the default resolves the release build
-  // checked out next to this repo (../tsv relative to the project root).
-  const tsvBin = process.env.TSV_BIN ?? `${projectRoot}/../tsv/target/release/tsv`;
+  // tsv is a native Rust binary, not an npm bin: the platform package's `tsv`
+  // (or `TSV_BIN`) — see `resolveTsv`.
+  const tsvBin = resolveTsv(projectRoot).bin;
+  // `@fuzdev/tsv`'s own `tsv` bin is a Node dispatcher that resolves that same
+  // platform binary and spawnSyncs it, forwarding argv, stdio, exit codes and
+  // signals — how anyone who installs tsv from npm runs it. Addressed by path
+  // for the same reason the WASM CLI is (below): both packages claim the `tsv`
+  // bin name.
+  const tsvNpmBin = `${projectRoot}/node_modules/@fuzdev/tsv/bin.js`;
   // rsvelte-fmt (@rsvelte/fmt) is an npm bin wrapping a native binary: it
   // formats .svelte in-process and delegates every other file to oxfmt. On the
   // .svelte-only bench-svelte corpus that oxfmt leg spawns on zero files — the
   // startup cost is part of its shipped directory posture, so it stays.
   const rsvelteBin = `${projectRoot}/node_modules/.bin/rsvelte-fmt`;
   // @fuzdev/tsv_wasm ships tsv's CLI as a Node script over the WASM engine —
-  // one source, shipped verbatim as the bin of both that package and the native
-  // @fuzdev/tsv. Addressed by explicit path rather than through
+  // one source, shipped verbatim as the bin of that package and as the native
+  // @fuzdev/tsv's fallback. Addressed by explicit path rather than through
   // `node_modules/.bin/tsv`, because both packages claim that same bin name:
-  // whichever installed last would own the symlink, and this row has to be the
-  // WASM one every time.
+  // which one owns the shim is the package manager's call, and this row has to
+  // be the WASM one every time.
   const tsvWasmCli = `${projectRoot}/node_modules/@fuzdev/tsv_wasm/cli.js`;
 
   // NOTE: Do not use `--experimental-cli`, as it seems to behave differently than the stable CLI...
@@ -86,10 +141,16 @@ export function createFormatters(projectRoot, configDir) {
     tsv: (files) => `${tsvBin} format ${files}`,
 
     // Same CLI contract as the native binary — subcommands, flags, exit codes,
-    // traversal and ignore rules, diagnostics — over the WASM engine instead,
-    // and single-threaded (`--jobs` is accepted for parity and ignored). Also
+    // traversal and ignore rules, diagnostics — over the WASM engine instead.
+    // Since tsv 0.3 it fans multi-file runs onto node:worker_threads above a
+    // file-count threshold; on a single file it is one thread. Also
     // non-configurable, so it takes no config argument either.
     "tsv-wasm": (files) => `node ${tsvWasmCli} format ${files}`,
+
+    // The native binary again, reached the way `npx tsv` reaches it: through
+    // @fuzdev/tsv's Node dispatcher. Same output as the tsv row plus one Node
+    // cold start and a spawn — the delivery cost this row exists to measure.
+    "tsv-npm": (files) => `node ${tsvNpmBin} format ${files}`,
 
     // Unlike tsv, rsvelte-fmt is configurable; the scenario's oxfmtrc.json pins
     // it to tsv's fixed style (printWidth 100, tabs, single quotes, no trailing
@@ -110,6 +171,8 @@ export function createFormatters(projectRoot, configDir) {
       tsv: (files) => `${tsvBin} format --check ${files}`,
 
       "tsv-wasm": (files) => `node ${tsvWasmCli} format --check ${files}`,
+
+      "tsv-npm": (files) => `node ${tsvNpmBin} format --check ${files}`,
 
       rsvelte: (files) => `${rsvelteBin} --check --config ${configDir}/oxfmtrc.json ${files}`,
     },
@@ -250,6 +313,8 @@ const PREFLIGHT_MATCHERS = {
   // same diagnostics — shared here rather than copied so the two can't drift
   // apart in this table while the tool keeps them identical.
   "tsv-wasm": TSV_DIAGNOSTIC,
+  // The dispatcher forwards the native binary's stdio verbatim.
+  "tsv-npm": TSV_DIAGNOSTIC,
   // Anchored on the .svelte extension so summary lines ("rsvelte-fmt: would
   // reformat N files") can never read as a rejected path. Note this covers only
   // rsvelte-fmt's own Svelte leg; diagnostics from the oxfmt it delegates other
@@ -313,6 +378,7 @@ const PREFLIGHT_SCOPE_COUNTS = {
   },
   tsv: TSV_SCOPE_COUNTS,
   "tsv-wasm": TSV_SCOPE_COUNTS,
+  "tsv-npm": TSV_SCOPE_COUNTS,
   "rsvelte-fmt": {
     considered: /would reformat \d+ \/ (\d+) files/m,
     changed: /would reformat (\d+) \/ \d+ files/m,
@@ -346,6 +412,11 @@ const PREFLIGHT_ERROR_SIGNALS = {
   // package exits 1 with no diagnostics at all — which would otherwise read as a
   // formatter that found nothing wrong.
   "tsv-wasm": /^error: |^Error: Cannot find module /m,
+  // A path-addressed script too, with one more failure of its own: the
+  // dispatcher warns and falls back to the JS CLI when it can't run the native
+  // binary, which would time the wrong distribution under this row's name.
+  "tsv-npm":
+    /^error: |^Error: Cannot find module |^warning: @fuzdev\/tsv could not run its native CLI/m,
 };
 
 /**

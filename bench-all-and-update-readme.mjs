@@ -1,20 +1,22 @@
 #!/usr/bin/env node
 
-import { exec, execFile, spawn } from "child_process";
-import { constants, existsSync } from "fs";
+import { exec, execFile } from "child_process";
+import { constants } from "fs";
 import { access, readFile, stat, writeFile } from "fs/promises";
 import os from "os";
 import { promisify } from "util";
+
+import { resolveTsv } from "./shared/utils.mjs";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 /**
- * The tsv binary this run will bench — the same resolution `shared/utils.mjs`
- * does, repeated here so the version reported and the binary measured are the
- * same file rather than two things that usually agree.
+ * The tsv binary this run will bench and where it came from — the same
+ * resolution `shared/utils.mjs` does, so the version reported and the binary
+ * measured are the same file rather than two things that usually agree.
  */
-const tsvBin = process.env.TSV_BIN ?? "../tsv/target/release/tsv";
+const { bin: tsvBin, source: tsvSource } = resolveTsv(".");
 
 /**
  * The machine the numbers came from. Recorded because the ratios move with it:
@@ -30,49 +32,25 @@ function describeMachine() {
 }
 
 /**
- * Bring the tsv binary up to date before benching it, and refuse to publish
- * without one.
+ * Refuse to publish without a usable tsv binary.
  *
- * Nothing else does this: `bench-all.mjs` runs `init.sh` only when a corpus is
- * missing, and `init.sh` builds tsv only when the binary is *absent* — it never
- * refreshes a stale one, deliberately, so a pinned copy isn't overwritten. That
- * is fine while iterating; this is the publish path, where the numbers land in
- * the README under a version string and the two have to describe the same
- * build. An explicit `TSV_BIN` is still left alone — pinning a fixed binary is
- * the whole point of that path.
+ * Without one the four tsv scenarios abort, and a scenario abort is non-fatal to
+ * `bench-all.mjs` — so the README would quietly lose those scenarios whole, not
+ * just their tsv rows. The binary normally comes from `@fuzdev/tsv`'s platform
+ * package, installed by `pnpm install` and pinned by the lockfile, so there is
+ * nothing to build here any more; `TSV_BIN` still benches a local build as-is.
  */
 async function prepareTsv() {
-  if (process.env.TSV_BIN) {
-    console.log(`Using TSV_BIN as-is (not rebuilt): ${tsvBin}`);
-  } else if (existsSync("../tsv/Cargo.toml")) {
-    console.log("Building tsv release binary...");
-    try {
-      await new Promise((resolve, reject) => {
-        const proc = spawn(
-          "cargo",
-          ["build", "--release", "-p", "tsv_cli", "--manifest-path", "../tsv/Cargo.toml"],
-          { stdio: "inherit" },
-        );
-        proc.on("error", reject);
-        proc.on("close", (code) =>
-          code === 0 ? resolve() : reject(new Error(`cargo build exited with code ${code}`)),
-        );
-      });
-    } catch (error) {
-      console.error(`Error building tsv: ${error.message}`);
-      console.error("Fix ../tsv, or set TSV_BIN to a prebuilt binary to bench that instead.");
-      process.exit(1);
-    }
-  }
-
-  // Without a usable binary the three tsv scenarios abort, and a scenario abort
-  // is non-fatal to `bench-all.mjs` — so the README would quietly lose those
-  // scenarios whole, not just their tsv rows. Refuse to publish that.
+  console.log(
+    tsvSource === "TSV_BIN"
+      ? `Using TSV_BIN as-is: ${tsvBin}`
+      : `Using tsv from ${tsvSource ?? "(unresolved)"}: ${tsvBin}`,
+  );
   try {
     await access(tsvBin, constants.X_OK);
   } catch {
     console.error(`No executable tsv binary at ${tsvBin}.`);
-    console.error("Check out ../tsv, or point TSV_BIN at a prebuilt binary.");
+    console.error("Run pnpm install, or point TSV_BIN at a local build.");
     process.exit(1);
   }
 }
@@ -114,13 +92,12 @@ async function getVersions() {
       execAsync("vp exec rsvelte-fmt --version"),
     ]);
 
-    // tsv is a native binary, not an npm package, so `vp exec` can't reach it —
-    // ask the binary itself. Sourcing this from the measured artifact rather
-    // than from `../tsv/Cargo.toml` is what keeps the label honest: the
-    // workspace version moves at a release and the binary only when it's
-    // rebuilt, so the two disagree exactly when a stale build is being
-    // published. It also means the copy-in `TSV_BIN` path names a real version
-    // instead of degrading to "unknown".
+    // tsv is a native binary, not an npm bin `vp exec` can reach — ask the
+    // binary itself. Sourcing this from the measured artifact is what keeps the
+    // label honest: with TSV_BIN it names the build that actually ran, and with
+    // the platform package it is cross-checked against that package's version
+    // below, so a binary that isn't the one the lockfile pins can't publish
+    // under its number.
     let tsv = "unknown";
     try {
       const { stdout } = await execFileAsync(tsvBin, ["--version"]);
@@ -129,17 +106,31 @@ async function getVersions() {
       // no usable binary — the tsv rows are missing from the results anyway
     }
 
-    // That version is a workspace constant: it doesn't move between builds, so
-    // it still can't tell a binary built this morning from one built months ago.
-    // Its mtime can.
-    try {
-      // Local date, not toISOString(): a binary built at 20:57 local reads as the
-      // next day in UTC, which wouldn't match `git log --date=short` on the
-      // corpus line or the wall calendar of whoever ran the benchmark.
-      const built = (await stat(tsvBin)).mtime.toLocaleDateString("en-CA");
-      tsv = `${tsv} (binary built ${built})`;
-    } catch {
-      // no binary to date
+    if (tsvSource === "TSV_BIN") {
+      // A local build's version is a workspace constant that doesn't move
+      // between builds, so it can't tell a binary built this morning from one
+      // built months ago. Its mtime can. Local date, not toISOString(): a build
+      // at 20:57 local reads as the next day in UTC, which wouldn't match
+      // `git log --date=short` on the corpus line or the wall calendar of
+      // whoever ran the benchmark.
+      try {
+        const built = (await stat(tsvBin)).mtime.toLocaleDateString("en-CA");
+        tsv = `${tsv} (TSV_BIN, binary built ${built})`;
+      } catch {
+        // no binary to date
+      }
+    } else if (tsvSource) {
+      const [name, version] = tsvSource
+        .split("@")
+        .filter(Boolean)
+        .map((s) => s.trim());
+      if (tsv !== version && tsv !== "unknown") {
+        console.error(
+          `tsv --version says ${tsv} but the installed platform package is ${tsvSource}; refusing to publish a mismatched version`,
+        );
+        process.exit(1);
+      }
+      tsv = `${tsv} (@${name})`;
     }
 
     // @fuzdev/tsv_wasm is an npm package, but not one `vp exec` can reach: its

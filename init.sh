@@ -114,19 +114,19 @@ else
 	echo "Svelte corpus for bench-svelte already exists"
 fi
 
-# Ensure the tsv native binary exists (built from the sibling tsv repo).
-TSV_BIN="${TSV_BIN:-../tsv/target/release/tsv}"
-if [ ! -x "$TSV_BIN" ]; then
-	if [ -f "../tsv/Cargo.toml" ]; then
-		echo "Building tsv release binary..."
-		cargo build --release -p tsv_cli --manifest-path ../tsv/Cargo.toml
-	else
-		echo ""
-		echo "tsv binary not found at $TSV_BIN and ../tsv is not present."
-		echo "Build it ('cargo build --release -p tsv_cli' in the tsv repo) or set TSV_BIN."
-	fi
+# Confirm the tsv native binary is in place. It comes from npm now — `pnpm
+# install` pulls @fuzdev/tsv and the platform package carrying the binary — with
+# TSV_BIN as the override for a local build; shared/utils.mjs owns the
+# resolution, so ask it rather than repeat it here.
+TSV_RESOLVED="$(node --input-type=module -e 'import { resolveTsv } from "./shared/utils.mjs"; console.log(resolveTsv(".").bin)')"
+if [ ! -x "$TSV_RESOLVED" ]; then
+	echo ""
+	echo "tsv binary not found at $TSV_RESOLVED."
+	echo "pnpm install should have installed @fuzdev/tsv's platform package for this machine;"
+	echo "on a platform it doesn't ship for, set TSV_BIN to a local build"
+	echo "('cargo build --release -p tsv_cli' in a tsv checkout)."
 else
-	echo "tsv binary present ($TSV_BIN)"
+	echo "tsv binary present ($TSV_RESOLVED)"
 fi
 
 echo ""
