@@ -96,9 +96,10 @@ bench-<name>/
 ```
 
 `bench-svelte/` deviates from this shape: its only config is `oxfmtrc.json`
-(rsvelte-fmt's; tsv takes none), plus `setup-corpus.mjs` (builds `data/` from the
-sibling `../corpora` snapshot at a pinned commit) — see "The rsvelte-fmt integration"
-below.
+(rsvelte-fmt's; tsv takes none), plus `corpora-pin.mjs` (the one place its corpus
+is pinned) and `setup-corpus.mjs` (builds `data/` from the fuzdev/corpora snapshot
+at that pin, out of a sibling `../corpora` checkout or a gitignored `corpora/`
+fetch cache) — see "The rsvelte-fmt integration" below.
 `bench-tsv-delivery/` deviates further: `bench.mjs` and `data/`, no configs at
 all, since both of its rows are tsv and tsv is non-configurable.
 
@@ -358,13 +359,13 @@ on a `pnpm-lock.yaml` bump. Two reasons, both of which corrupt the results:
 - **CI has no tsv.** Neither workflow builds it, so preflight finds the binary
   unavailable and `bench-large-single-file`, `bench-ts-only`, `bench-svelte`, and
   `bench-tsv-delivery` abort whole — the README loses those four scenarios
-  entirely, not just their tsv rows (per-scenario errors are non-fatal, so the run still "succeeds"). CI also has
-  no `../corpora` sibling checkout (one public repo — a shallow fetch of the pinned
-  `CORPORA_COMMIT` would do; a plain `--depth=1` clone of HEAD would not have it), so the
-  `bench-svelte` corpus can't build there either. Nothing blocks teaching CI to build tsv now —
-  `github.com/fuzdev/tsv` is public and the corpus no longer needs the private fuz
-  repos — it just isn't wired up. Until it is, `update-readme.yml` **fails** rather
-  than opening that PR: the script aborts up front on a missing tsv binary.
+  entirely, not just their tsv rows (per-scenario errors are non-fatal, so the run still "succeeds"). The
+  `bench-svelte` corpus is no longer a second blocker: with no `../corpora` sibling,
+  `setup-corpus.mjs` fetches the pinned commit from GitHub itself. Nothing blocks
+  teaching CI to build tsv now — `github.com/fuzdev/tsv` is public and the corpus
+  needs no private repos — it just isn't wired up. Until it is, `update-readme.yml`
+  **fails** rather than opening that PR: the script aborts up front on a missing
+  tsv binary.
 - **Core count changes the answer.** biome, oxfmt, and tsv scale with cores while
   prettier is effectively serial, so a runner's ratios and a dev box's ratios are
   different numbers, not noisy versions of the same one. A README mixing rows from
@@ -570,9 +571,11 @@ Candidates:
   drifts and a rerun months apart is not comparable — and outline is now cloned
   twice, which can land two different commits. `bench-large-single-file` already
   pins (`v5.9.2`); the clones should too. `bench-svelte` is the exception:
-  `setup-corpus.mjs` reads its seven sources from the fuzdev/corpora snapshot at a
-  pinned `CORPORA_COMMIT`, so that corpus reproduces from one SHA (and `data/`'s
-  commit message records each source's upstream commit). Until the rest are pinned, each scenario at least prints a
+  `setup-corpus.mjs` reads its seven sources from the fuzdev/corpora snapshot at the
+  commit and `collections/` tree id pinned in `corpora-pin.mjs`, so that corpus
+  reproduces from one SHA, its snapshot commit is deterministic over the bytes,
+  and `bench.mjs` refuses a `data/` built at any other pin (see the rsvelte-fmt
+  section). Until the rest are pinned, each scenario at least prints a
   `Corpus:` line (`describeCorpus`) naming the commit and date it ran against — or,
   for the single downloaded file, its size and content hash — so two runs can be
   told apart instead of silently differing.
@@ -604,18 +607,33 @@ formatters, on `.svelte` files only.
   and output volume comparable. This scenario set the precedent the other two
   tsv-inclusive ones now follow (see the style-parity note above).
 - **The corpus** (`setup-corpus.mjs`): a `.svelte`-only snapshot of seven
-  third-party sources, copied with `git archive` from the sibling `../corpora`
-  checkout ([fuzdev/corpora](https://github.com/fuzdev/corpora)) at a pinned
-  `CORPORA_COMMIT`: kit (`packages/kit/src`) and svelte.dev (`apps/svelte.dev/src`,
-  `packages/repl/src`, `packages/site-kit/src`) — the same trees tsv's own
-  bench corpus uses (`svelte` is absent on purpose: `packages/svelte/src` is the
-  compiler, zero `.svelte` files) — plus five Svelte libraries: layerchart,
-  svelte-ux, flowbite-svelte, svelte-maplibre, layercake. The snapshot already
-  leaves each upstream's test fixtures behind, so the only filter here is the
-  extension. ~2,230 files / ~4.1MB, all third-party and
-  prettier-shaped — neither benched formatter is measured on code it already
-  shaped, and both would rewrite ~92% of the files, so write volume is
-  symmetric too.
+  third-party sources, read out of the
+  [fuzdev/corpora](https://github.com/fuzdev/corpora) snapshot at the commit
+  pinned in `corpora-pin.mjs`: kit (`packages/kit/src`) and svelte.dev
+  (`apps/svelte.dev/src`, `packages/repl/src`, `packages/site-kit/src`) — the same
+  trees tsv's own bench corpus uses (`svelte` is absent on purpose:
+  `packages/svelte/src` is the compiler, zero `.svelte` files) — plus five Svelte
+  libraries: layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake.
+  The snapshot already leaves each upstream's test fixtures behind, so the only
+  filter here is the extension. 2,226 files / ~4.1MB at the current pin, all
+  third-party and prettier-shaped — neither benched formatter is measured on code
+  it already shaped, and both would rewrite ~92% of the files, so write volume is
+  symmetric too. That fairness premise is checked, not assumed: the manifest names
+  who shaped each collection (`shaped_by`), and the build refuses one shaped by a
+  formatter this scenario benches.
+- **Where the bytes come from, and what is pinned.** The script never reads a
+  working tree: it extracts from git's object store (`read-tree` +
+  `checkout-index`, no `tar`), from the first of `$CORPORA_DIR`, the sibling
+  `../corpora` checkout (the workspace default), or a gitignored
+  `bench-svelte/corpora/` cache it fills with a depth-1 fetch of the pinned commit
+  from GitHub — so a fresh machine or CI builds it with nothing but network. A
+  sibling that's behind the pin is an error with a fetch hint, not a silent
+  fallback. `corpora-pin.mjs` pins **both** the commit (what a reader fetches) and
+  the `collections/` tree id (what the corpus _is_ — corpora's own README says
+  consumers pin the tree, and it's what tsv's `GATE_CHECKOUT_IDS` pins), and the
+  build asserts the commit carries that tree, plus an `EXPECTED_FILES` count so a
+  pin bump that moves the corpus has to say so in the diff. Bumping the pin is
+  those three constants.
 - **Why a snapshot, and why `git init`**: the two tools discover files
   differently (tsv is config-free and gitignore-aware; rsvelte-fmt walks
   `.svelte` itself and hands the rest of a directory to oxfmt, which would pick
@@ -624,8 +642,14 @@ formatters, on `.svelte` files only.
   current pin), which preflight now asserts every run. The
   `git init` makes `data/` its own git root (sidestepping the outer
   `.gitignore` trap described above) and provides the reset-per-run baseline;
-  provenance (per-source commit + file count) is recorded in the snapshot's
-  commit message. Regenerate with
+  provenance (the corpora pin line, then per-source commit + file count) is
+  recorded in the snapshot's commit message, and the commit itself is
+  deterministic — fixed author, the corpora commit's date — so identical bytes
+  give an identical snapshot SHA on every machine, which is what the scenario's
+  `Corpus:` line prints beside the pin. `bench.mjs` reads that pin line back and
+  refuses a `data/` built at any other pin, since `setup-corpus.mjs` only ever
+  builds a _missing_ `data/` (staged in a gitignored `data.tmp/` and renamed into
+  place last, so an interrupted build never leaves a half-corpus). Regenerate with
   `rm -rf bench-svelte/data && node ./bench-svelte/setup-corpus.mjs`.
 - **No `--ignore-failure`** (alone among the scenarios): both formatters exit 0
   on a successful write run, so any non-zero exit here is a real error — and

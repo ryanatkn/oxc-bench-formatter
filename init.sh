@@ -99,14 +99,16 @@ fi
 
 # Build the Svelte corpus for bench-svelte (tsv vs rsvelte-fmt, .svelte only).
 # Seven collections (kit, svelte.dev, layerchart, svelte-ux, flowbite-svelte,
-# svelte-maplibre, layercake) copied from the sibling ../corpora checkout at a
-# pinned commit into a git-init'd data/ tree — see bench-svelte/setup-corpus.mjs.
+# svelte-maplibre, layercake) read from the fuzdev/corpora snapshot at the
+# commit pinned in bench-svelte/corpora-pin.mjs — out of the sibling ../corpora
+# checkout if there is one, else a depth-1 fetch from GitHub — into a git-init'd
+# data/ tree. See bench-svelte/setup-corpus.mjs.
 SVELTE_CORPUS_FAILED=""
 if [ ! -d "bench-svelte/data" ]; then
 	echo "Building Svelte corpus for bench-svelte..."
-	# Needs the ../corpora sibling checkout, with the pinned commit fetched.
-	# Without it this is the one setup step that can't complete, so record it and
-	# say so at the end rather than letting "Setup complete!" paper over it.
+	# Can still fail (a ../corpora sibling that's behind the pin, no network for
+	# the fetch), so record it and say so at the end rather than letting
+	# "Setup complete!" paper over it.
 	node ./bench-svelte/setup-corpus.mjs || SVELTE_CORPUS_FAILED="1"
 else
 	echo "Svelte corpus for bench-svelte already exists"

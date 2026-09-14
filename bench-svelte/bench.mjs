@@ -14,6 +14,13 @@ import {
   runPreflight,
   setupCwd,
 } from "../shared/utils.mjs";
+import {
+  COLLECTIONS,
+  CORPORA_COMMIT,
+  CORPORA_TREE,
+  describePin,
+  readSnapshotPin,
+} from "./corpora-pin.mjs";
 
 const [WARMUP_RUNS, BENCHMARK_RUNS] = benchRunCounts(2, 5);
 
@@ -28,12 +35,24 @@ async function main() {
   checkGnuTime();
 
   console.log("");
-  // This is the one corpus that can't be fetched — setup-corpus.mjs builds it
-  // from the sibling ../corpora snapshot — so name the fix instead of failing
+  // This is the one corpus init.sh doesn't clone — setup-corpus.mjs builds it
+  // from the pinned fuzdev/corpora snapshot — so name the fix instead of failing
   // inside `git reset` with "not a git repository".
   if (!existsSync(`${dataDir}/.git`)) {
     console.error(
-      "bench-svelte corpus missing. Build it with `node ./bench-svelte/setup-corpus.mjs` (needs a ../corpora checkout beside this repo).",
+      "bench-svelte corpus missing. Build it with `node ./bench-svelte/setup-corpus.mjs` (reads ../corpora if present, else fetches the pinned commit from GitHub).",
+    );
+    process.exit(1);
+  }
+  // And refuse a corpus built at some other pin: the pin in corpora-pin.mjs is
+  // what these numbers claim to describe, and setup-corpus only ever builds a
+  // MISSING ./data, so a bumped pin over an old snapshot would be timed as-is.
+  const built = readSnapshotPin(dataDir);
+  if (built?.commit !== CORPORA_COMMIT || built.tree !== CORPORA_TREE) {
+    console.error(
+      `bench-svelte corpus was built from ${
+        built ? describePin(built.commit, built.tree) : "an older setup-corpus (no pin recorded)"
+      }, but corpora-pin.mjs pins ${describePin()}. Rebuild it: rm -rf bench-svelte/data && node ./bench-svelte/setup-corpus.mjs`,
     );
     process.exit(1);
   }
@@ -45,10 +64,10 @@ async function main() {
   // whatever the previous run left formatted.
   execSync(prepareCmd, { stdio: "ignore" });
 
-  console.log(
-    "Target: third-party .svelte corpus (kit, svelte.dev, layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake)",
-  );
-  console.log(`Corpus: ${describeCorpus(dataDir)}`);
+  console.log(`Target: third-party .svelte corpus (${COLLECTIONS.join(", ")})`);
+  // The pin names the bytes; the snapshot commit is deterministic over them
+  // (see setup-corpus.mjs), so its hash is comparable between machines too.
+  console.log(`Corpus: ${describePin()}, snapshot ${describeCorpus(dataDir)}`);
   console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
   console.log("- Git reset before each run");
   console.log("- .svelte only: the two Svelte-native formatters head-to-head");
