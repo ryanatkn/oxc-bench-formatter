@@ -52,7 +52,7 @@ async function main() {
   // the scenario if one doesn't. This is what lets the timed runs below drop
   // --ignore-failure: a tool that rejects files would otherwise be timed on the
   // ones it skipped and look faster for it.
-  await runPreflight([
+  runPreflight([
     { name: "prettier", command: formatters.check.prettier(dataDir) },
     {
       name: "prettier+oxc-parser",
@@ -114,6 +114,10 @@ async function main() {
       },
     ],
     BENCHMARK_RUNS,
+    // Ratios against tsv, the scenario's subject, and a crash in a memory run
+    // aborts the scenario — as it does in the timed pass, which runs without
+    // --ignore-failure.
+    { baseline: "tsv", failOnCrash: true },
   );
 
   console.log("");

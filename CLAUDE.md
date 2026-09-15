@@ -59,7 +59,8 @@ is upstream's, untouched.
   match the prettier width upstream already set there — it was comparing 100
   against 80.
 - **Every scenario** prints a `Corpus:` provenance line, and memory rows carry a
-  ratio to the lowest-memory formatter.
+  ratio to a fixed per-scenario baseline (tsv where it runs, oxfmt in upstream's
+  three) rather than to whichever tool used least memory that run.
 - **`shared/utils.mjs`** carries the fork-owned preflight, scope, and provenance
   machinery; `preflight-selftest.mjs` (run first by `bench-all.mjs`) guards it.
 - **Tooling**: `.node-version` pinned to 24, `@rsvelte/fmt`, `@fuzdev/tsv` and
@@ -131,9 +132,18 @@ all, since all of its rows are tsv and tsv is non-configurable.
   - Note in the source: do **not** pass prettier `--experimental-cli` (it
     behaves differently from the stable CLI).
 - **`runHyperfine(args)`** — spawns `hyperfine` (stdio inherited), resolves on exit 0.
-- **`runMemoryBenchmarks(benchmarks, runs)`** / `measureMemory` — runs each
-  command under GNU `time -f '%M'` (peak RSS in KB → MB). Auto-detects `gtime`
-  then `/usr/bin/time`; `checkGnuTime()` warns and skips memory if neither.
+- **`runMemoryBenchmarks(benchmarks, runs, {baseline, failOnCrash})`** /
+  `measureMemory` — runs each command under GNU `time -f '%M'` (peak RSS in
+  KB → MB). Auto-detects `gtime` then `/usr/bin/time`; `checkGnuTime()` warns
+  and skips memory if neither. `baseline` (required) names the row every ratio
+  is taken against — tsv in the tsv scenarios, oxfmt in upstream's — so the
+  column doesn't re-anchor on whichever tool used least that run; a ratio below
+  1 means less than the baseline. A run the command died from a signal in (GNU
+  time exits 128+n) is not a measurement: with `failOnCrash` (the tsv scenarios)
+  it aborts the scenario with an `→ aborting:` line and no table, the memory
+  counterpart of timing without `--ignore-failure`; without it the run is
+  excluded and a `→ … runs crashed` line under the rows says so. A formatter's
+  own non-zero exit still counts, as `--ignore-failure` does in the timed pass.
 - **`printHeader`**, **`FORMATTER_NAMES`** — display helpers.
 - **`setupCwd(import.meta.url)`** — each `bench.mjs` chdirs into its own dir so
   relative config/data paths resolve.
@@ -181,8 +191,10 @@ same real-world repo minus the 682 `.tsx` files tsv cannot parse, which keeps th
 corpus third-party: no formatter here is measured on code it already shaped.
 
 **Methodology — preflight:** the three tsv-free upstream scenarios run hyperfine
-with `--ignore-failure` (and the memory pass swallows command errors everywhere),
-so a formatter that _errors_ partway is timed rather than penalized — one that
+with `--ignore-failure` (and their memory pass tolerates a formatter's own
+non-zero exit, excluding and reporting only runs killed by a signal, since a
+process that died partway measured nothing), so a formatter that _errors_
+partway is timed rather than penalized — one that
 rejected much of the corpus could look artificially fast. The four tsv-inclusive
 scenarios drop the flag, because preflight has already ruled out the corpus
 reasons a formatter would exit non-zero: what's left is a real crash, and it must
@@ -362,8 +374,8 @@ push/PR as a smoke test, tsv scenarios included.
 **Nothing builds tsv any more.** The binary is `@fuzdev/tsv`'s platform package,
 installed by `pnpm install` and pinned by the lockfile like every other
 formatter; `init.sh` only confirms it resolves, and `update-readme` aborts up
-front if it isn't executable — rather than letting the four tsv scenarios abort
-one at a time and drop out of the README unremarked. `TSV_BIN` benches a local
+front if it isn't executable — rather than publishing all four tsv scenarios aborted
+for one missing binary. `TSV_BIN` benches a local
 build as-is (see "Setting up the tsv binary").
 
 **Heads-up — regenerate the README locally, on one machine.** `update-readme.yml`
@@ -396,7 +408,10 @@ benchmarks page, and since this suite publishes no JSON, its generator parses th
 README: the `<!-- BENCHMARK_RESULTS_START -->` / `END` markers, the
 `=====`-banner scenario headings, hyperfine's `Benchmark N:` / `Time (mean ± σ)` /
 `Range (min … max)` / `Summary` lines, the `Memory Usage:` rows, the preflight
-block, the `## Versions` list, and the `_Measured on: …_` line. Changing any of
+block (including the `→ aborting:` line, which tells it a scenario was aborted
+rather than misparsed — before timing when it follows the preflight rows, after
+timing when it follows the `Summary`), the `## Versions` list, and the
+`_Measured on: …_` line. Changing any of
 those shapes — or dropping a marker — fails that site's `gro gen` with a message
 naming the scenario and section that stopped parsing (a rename that still parses
 trips its tests instead). It fails loudly rather than quietly publishing stale
@@ -662,13 +677,21 @@ formatters, on `.svelte` files only.
   four over this corpus during one sitting (its launcher
   propagates signal deaths as exit 128+n, e.g. 134), which must abort the
   benchmark rather than be timed as a fast partial run. `runPreflight` flags
-  crashed check passes the same way — so expect this scenario to abort
-  occasionally and need a rerun, which is the honest outcome while the crash is
-  real: a retry inside the harness would hide a defect in a tool whose numbers
-  this README publishes. **Check for it after `update-readme`:** an aborted
-  scenario writes its banner and preflight into the README with no timings under
-  it, and tsv.fuz.dev's generator refuses a scenario it can't parse timings from.
-  Rerun before committing rather than shipping a half-scenario.
+  crashed check passes the same way — so expect this scenario to abort more
+  often than not, which is the honest outcome while the crash is real: a retry
+  inside the harness would hide a defect in a tool whose numbers this README
+  publishes. A full run needs rsvelte-fmt to survive its check plus every
+  warmup and timed run back to back, so at a one-in-four crash rate a clean
+  scenario is a few-percent event. **An aborted scenario is publishable.** It
+  writes its banner, preflight rows, and the `→ aborting:` line into the README
+  with no timings under it, and tsv.fuz.dev's generator reads that abort line
+  and renders the scenario as aborted — naming the formatter whose preflight
+  row faulted — rather than dropping it or refusing the README. The memory
+  pass is strict the same way (`failOnCrash`): a run killed by a signal there
+  aborts after timing, so the block carries timings and a `Summary` but no
+  `Memory Usage:` table, and the site renders the times with the abort note
+  under them. Rerun if you want numbers; commit the abort if you don't get
+  them.
 - **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-svelte/bench.mjs`
   overrides the 2 × 5 defaults for a fast, low-accuracy smoke run — see "Quick
   runs" under Scenarios for the other three scenarios that take it.

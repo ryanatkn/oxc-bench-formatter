@@ -323,18 +323,6 @@ const PREFLIGHT_MATCHERS = {
   "rsvelte-fmt": /^rsvelte-fmt: (.+?\.svelte): /gm, // rsvelte-fmt: path: rsvelte_formatter error: ...
 };
 
-// Patterns saying "this tool reported an error" without naming a file. A check
-// command can fail at the command level rather than per file — an unresolvable
-// plugin, a bad config, a path that matched nothing — and every such failure
-// leaves the matcher above with nothing to capture, so the formatter reads as
-// clean and is then timed doing no work at all. With `--ignore-failure` that
-// posts as an extraordinary speed.
-//
-// Only tools whose error prefix is unambiguous in check mode are listed. biome
-// calls formatting diffs "errors" and oxfmt's failure text names no file, so
-// neither has a signal that couldn't fire on an ordinary run — a command-level
-// failure in those two still reads as clean. `preflight-selftest.mjs` records
-// exactly which formatters are covered.
 // How each tool reports the size of the job it just did.
 //
 // `considered` is how many files it looked at. Those numbers must agree: the
@@ -403,6 +391,18 @@ function readCount(spec, output) {
   return match ? Number(match[1]) : null;
 }
 
+// Patterns saying "this tool reported an error" without naming a file. A check
+// command can fail at the command level rather than per file — an unresolvable
+// plugin, a bad config, a path that matched nothing — and every such failure
+// leaves the matcher above with nothing to capture, so the formatter reads as
+// clean and is then timed doing no work at all. With `--ignore-failure` that
+// posts as an extraordinary speed.
+//
+// Only tools whose error prefix is unambiguous in check mode are listed. biome
+// calls formatting diffs "errors" and oxfmt's failure text names no file, so
+// neither has a signal that couldn't fire on an ordinary run — a command-level
+// failure in those two still reads as clean. `preflight-selftest.mjs` records
+// exactly which formatters are covered.
 const PREFLIGHT_ERROR_SIGNALS = {
   prettier: /^\[error\] /m,
   "prettier+oxc-parser": /^\[error\] /m,
@@ -451,7 +451,7 @@ const PREFLIGHT_ERROR_SIGNALS = {
  * errors without naming a file, has no diagnostic matcher to read, finds nothing
  * to change, or disagrees with the others about how many files are in scope
  */
-export async function runPreflight(checks, { quiet = false } = {}) {
+export function runPreflight(checks, { quiet = false } = {}) {
   const log = quiet ? () => {} : console.log;
 
   log("");
@@ -652,9 +652,12 @@ export async function runPreflight(checks, { quiet = false } = {}) {
 export function runHyperfine(args) {
   return new Promise((resolve, reject) => {
     const proc = spawn("hyperfine", args, { stdio: "inherit" });
-    proc.on("close", (code) => {
+    // A missing hyperfine is a spawn error, not an exit code; without this it
+    // surfaces as an unhandled event rather than the scenario's own failure.
+    proc.on("error", reject);
+    proc.on("close", (code, signal) => {
       if (code !== 0) {
-        reject(new Error(`Hyperfine failed with code ${code}`));
+        reject(new Error(`Hyperfine failed with ${signal ? `signal ${signal}` : `code ${code}`}`));
       } else {
         resolve();
       }
@@ -674,45 +677,79 @@ export function printHeader(title) {
 
 // ---
 
-// Run memory benchmarks
-export async function runMemoryBenchmarks(benchmarks, runs) {
+/**
+ * Measure each benchmark's peak RSS and print the `Memory Usage:` table.
+ *
+ * `baseline` names the formatter every other row's ratio is taken against — a
+ * fixed choice per scenario (tsv where tsv runs, oxfmt in upstream's three),
+ * never whichever tool happened to use least this run: a baseline that moves
+ * between regenerations makes the ratio column incomparable across READMEs,
+ * which is exactly what it exists for. Required; its own row carries no ratio,
+ * and a ratio below 1 means less memory than the baseline.
+ *
+ * `failOnCrash` makes a run killed by a signal abort the scenario — printed as
+ * an `→ aborting:` line and thrown, before any row is printed — the memory
+ * counterpart of timing without `--ignore-failure`. Without it, such runs are
+ * excluded from their row and reported under the table.
+ */
+export async function runMemoryBenchmarks(benchmarks, runs, { baseline, failOnCrash = false }) {
+  if (!benchmarks.some((bench) => bench.name === baseline)) {
+    throw new Error(
+      `memory baseline ${JSON.stringify(baseline)} is not one of the benchmarked formatters`,
+    );
+  }
+
+  // Measure everything before printing anything, so an abort leaves no
+  // half-written table: the README's consumer reads a `Memory Usage:` heading
+  // with no rows under it as a parse failure, and no heading as "not measured".
+  const measured = [];
+  for (const bench of benchmarks) {
+    const result = await measureMemory(bench.name, bench.command, bench.prepare, runs);
+    // Null only without GNU time — `checkGnuTime` already warned.
+    if (result) measured.push(result);
+  }
+  if (measured.length === 0) return [];
+
+  const crashed = measured.filter((r) => r.crashes > 0);
+  if (failOnCrash && crashed.length > 0) {
+    const detail = crashed
+      .map((r) => `${r.name} crashed (killed by a signal) in ${r.crashes} of ${r.runs} memory runs`)
+      .join("; ");
+    console.log("");
+    console.log(`  → aborting: ${detail} — a crash must fail the scenario, not thin its row`);
+    throw new Error(`memory measurement failed — ${detail}`);
+  }
+
   console.log("");
   console.log("Memory Usage:");
 
-  const results = [];
-  const unmeasured = [];
-  for (const bench of benchmarks) {
-    const result = await measureMemory(bench.name, bench.command, bench.prepare, runs);
-    if (result) {
-      results.push(result);
-    } else {
-      // Say so rather than omitting the row. A formatter whose every run failed
-      // would otherwise just be absent from the table below, which reads as "not
-      // benched" at a glance and as nothing at all to a parser.
-      unmeasured.push(bench.name);
-    }
+  // Say so rather than omitting the row. A formatter whose every run failed
+  // would otherwise just be absent from the table below, which reads as "not
+  // benched" at a glance and as nothing at all to a parser.
+  for (const result of measured) {
+    if (result.mean === null) console.log(`  ${result.name}: not measured (every run failed)`);
   }
 
-  // Nothing measured (no GNU time, or every command failed) — `checkGnuTime`
-  // already warned, so leave the section empty rather than reducing over [].
-  if (results.length === 0) {
-    return results;
-  }
-
-  // Print results, each relative to the lowest-memory formatter — the same
-  // baseline-and-ratio shape hyperfine uses for timing, so the memory section
-  // reads the same way. The baseline itself carries no ratio (it would be 1.00x).
-  for (const name of unmeasured) {
-    console.log(`  ${name}: not measured (every run failed)`);
-  }
-
-  const baseline = results.reduce((lowest, r) => (r.mean < lowest.mean ? r : lowest));
+  const results = measured.filter((r) => r.mean !== null);
+  const anchor = results.find((r) => r.name === baseline);
   for (const result of results) {
     const parts = [`min: ${result.min.toFixed(1)} MB`, `max: ${result.max.toFixed(1)} MB`];
-    if (result !== baseline) {
-      parts.push(`${format_ratio(result, baseline)} times more than ${baseline.name}`);
+    if (anchor && result !== anchor) {
+      parts.push(`${format_ratio(result, anchor)} times more than ${anchor.name}`);
     }
     console.log(`  ${result.name}: ${result.mean.toFixed(1)} MB (${parts.join(", ")})`);
+  }
+  if (!anchor) {
+    console.log(`  → ${baseline} was not measured, so the rows above carry no ratios`);
+  }
+
+  // After the rows, so the rows keep the shape the README's consumer parses: a
+  // row built from fewer runs than the header promised has to say so, or a
+  // formatter that crashes on part of the corpus publishes a clean-looking mean.
+  for (const result of crashed) {
+    console.log(
+      `  → ${result.name}: ${result.crashes} of ${result.runs} runs crashed (killed by a signal) — excluded from its row`,
+    );
   }
 
   return results;
@@ -754,9 +791,23 @@ export function checkGnuTime() {
   return true;
 }
 
-// Memory measurement function
+// Peak RSS of `command` over `runs` runs, or null without GNU time.
+//
+// Returns `{name, runs, crashes, mean, min, max, stddev}` — `mean` (and the rest)
+// null when no run produced a measurement, `crashes` the number of runs the
+// command died from a signal in, which are excluded: the peak RSS of a process
+// that was killed partway is not the cost of the job, and a nondeterministic
+// SIGABRT (rsvelte-fmt has one) would otherwise average in unremarked. A run
+// that exits non-zero on its own — a formatter erroring on some file, which the
+// timed pass tolerates too under `--ignore-failure` — did the whole job, so its
+// peak counts.
 async function measureMemory(name, command, prepareCmd, runs) {
+  if (!gnuTimeBinary) {
+    return null;
+  }
+
   const measurements = [];
+  let crashes = 0;
 
   for (let i = 0; i < runs; i++) {
     // Run prepare command if provided
@@ -768,27 +819,34 @@ async function measureMemory(name, command, prepareCmd, runs) {
       }
     }
 
-    // Run the command with GNU time to measure memory
+    // GNU time prints its `%M` line after the command's own output (merged in
+    // here) and exits with the command's status — 128+n when the command was
+    // killed by a signal. Read that status rather than pipe through `tail -1`,
+    // whose pipeline status is always zero: that turned a SIGABRT-killed run
+    // into an ordinary measurement.
+    const escapedCommand = command.replace(/'/g, "'\\''");
+    let output;
     try {
-      if (!gnuTimeBinary) {
-        return null;
-      }
-      const escapedCommand = command.replace(/'/g, "'\\''");
-      const output = execSync(`${gnuTimeBinary} -f '%M' sh -c '${escapedCommand}' 2>&1 | tail -1`, {
+      output = execSync(`${gnuTimeBinary} -f '%M' sh -c '${escapedCommand}' 2>&1`, {
         encoding: "utf8",
         stdio: "pipe",
+        maxBuffer: 256 * 1024 * 1024,
       });
-      const memKB = Number.parseInt(output.trim(), 10);
-      if (!Number.isNaN(memKB)) {
-        measurements.push(memKB);
+    } catch (error) {
+      if (typeof error.status === "number" && error.status >= 128) {
+        crashes++;
+        continue;
       }
-    } catch {
-      // Continue on error
+      output = typeof error.stdout === "string" ? error.stdout : "";
+    }
+    const memKB = Number.parseInt(output.trim().split("\n").at(-1) ?? "", 10);
+    if (!Number.isNaN(memKB)) {
+      measurements.push(memKB);
     }
   }
 
   if (measurements.length === 0) {
-    return null;
+    return { name, runs, crashes, mean: null, min: null, max: null, stddev: null };
   }
 
   // Calculate statistics. Values stay numeric (MB) so callers can derive ratios;
@@ -805,6 +863,8 @@ async function measureMemory(name, command, prepareCmd, runs) {
   const KB_TO_MB = 1024;
   return {
     name,
+    runs,
+    crashes,
     mean: mean / KB_TO_MB,
     min: measurements[0] / KB_TO_MB,
     max: measurements[measurements.length - 1] / KB_TO_MB,

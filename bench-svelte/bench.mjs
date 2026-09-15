@@ -75,7 +75,7 @@ async function main() {
 
   // Confirm both formatters accept the whole corpus before timing it, and abort
   // the scenario if one doesn't.
-  await runPreflight([
+  runPreflight([
     { name: "tsv", command: formatters.check.tsv(dataDir) },
     { name: "rsvelte-fmt", command: formatters.check.rsvelte(dataDir) },
   ]);
@@ -111,6 +111,10 @@ async function main() {
       },
     ],
     BENCHMARK_RUNS,
+    // Ratios against tsv, the scenario's subject, and a crash in a memory run
+    // aborts the scenario — as it does in the timed pass, which runs without
+    // --ignore-failure.
+    { baseline: "tsv", failOnCrash: true },
   );
 
   console.log("");

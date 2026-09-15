@@ -73,7 +73,7 @@ async function main() {
   // spellings of one tool trivially agreeing. The npm row's preflight also
   // catches the dispatcher falling back to the JS CLI, which would otherwise be
   // timed under the wrong name.
-  await runPreflight([
+  runPreflight([
     { name: "tsv-wasm", command: formatters.check["tsv-wasm"](dataFile) },
     { name: "tsv-npm", command: formatters.check["tsv-npm"](dataFile) },
     { name: "tsv", command: formatters.check.tsv(dataFile) },
@@ -120,6 +120,10 @@ async function main() {
       },
     ],
     BENCHMARK_RUNS,
+    // Ratios against tsv, the scenario's subject, and a crash in a memory run
+    // aborts the scenario — as it does in the timed pass, which runs without
+    // --ignore-failure.
+    { baseline: "tsv", failOnCrash: true },
   );
 
   console.log("");

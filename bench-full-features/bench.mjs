@@ -59,6 +59,9 @@ async function main() {
       },
     ],
     BENCHMARK_RUNS,
+    // Ratios against oxfmt, upstream's subject, so the column doesn't re-anchor
+    // on whichever tool used least this run.
+    { baseline: "oxfmt" },
   );
 
   console.log("");

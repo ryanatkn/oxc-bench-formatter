@@ -82,7 +82,7 @@ else
 	echo "On Ubuntu/Debian: apt install time"
 fi
 
-# Clone Outline again for the tsv-fair benchmark (bench-ts-only). A separate
+# Clone Outline again for the non-JSX benchmark (bench-ts-only). A separate
 # checkout from bench-js-no-embedded's so each scenario resets its own tree.
 #
 # tsv formats the JS/TS family but has no JSX/TSX parser, so this scenario scopes

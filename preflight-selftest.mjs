@@ -173,9 +173,9 @@ function buildCases(formatters) {
 }
 
 /** Run one check through the real `runPreflight` and report what it found. */
-async function probe(name, command) {
+function probe(name, command) {
   try {
-    const report = await runPreflight([{ name, command }], { quiet: true });
+    const report = runPreflight([{ name, command }], { quiet: true });
     return { rejected: report.failures[name], counts: report.counts[name], clean: true };
   } catch (error) {
     const report = error.report;
@@ -225,7 +225,7 @@ async function main() {
   for (const testCase of cases) {
     const { name, command, rejects, accepts, detectsCommandErrors, reportsConsidered } = testCase;
 
-    const onBroken = await probe(name, command(`./${rejects}`));
+    const onBroken = probe(name, command(`./${rejects}`));
     if (onBroken.unavailable) {
       // Not a failure: the binary is absent (tsv on a CI runner that never built
       // it), so this matcher is simply unverified. Unlike preflight, an
@@ -248,7 +248,7 @@ async function main() {
       );
     }
 
-    const onClean = await probe(name, command(`./${accepts}`));
+    const onClean = probe(name, command(`./${accepts}`));
     if (onClean.rejected.length > 0) {
       problems.push(`reported ${onClean.rejected.join(", ")} on the valid fixture ${accepts}`);
     } else if (!onClean.clean) {
@@ -267,7 +267,7 @@ async function main() {
     }
 
     if (detectsCommandErrors) {
-      const onMissing = await probe(name, command("./does-not-exist.ts"));
+      const onMissing = probe(name, command("./does-not-exist.ts"));
       if (onMissing.clean) {
         problems.push(
           "reported clean for a path that doesn't exist — a command-level failure would be timed as work",
@@ -336,7 +336,7 @@ async function main() {
   // instead of silent.
   if (!skipped.includes("tsv")) {
     try {
-      await runPreflight(
+      runPreflight(
         [
           { name: "tsv", command: formatters.check.tsv("./clean.ts") },
           { name: "biome", command: formatters.check.biome("./clean.ts ./clean2.ts") },
