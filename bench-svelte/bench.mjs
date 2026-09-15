@@ -83,7 +83,7 @@ async function main() {
   // No --ignore-failure, unlike the other scenarios: both formatters exit 0 on
   // a successful write run, so the only non-zero exits here are real errors or
   // crashes (a nondeterministic SIGABRT has been observed in rsvelte-fmt
-  // 0.7.4), and a crashed partial run must fail the benchmark loudly rather
+  // 0.7.4 and 0.7.11), and a crashed partial run must fail the benchmark loudly rather
   // than be timed as a fast pass.
   await runHyperfine([
     `--warmup=${WARMUP_RUNS}`,
