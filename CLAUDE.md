@@ -64,8 +64,7 @@ is upstream's, untouched.
   machinery; `preflight-selftest.mjs` (run first by `bench-all.mjs`) guards it.
 - **Tooling**: `.node-version` pinned to 24, `@rsvelte/fmt`, `@fuzdev/tsv` and
   `@fuzdev/tsv_wasm` added (with `@fuzdev/*` excluded from pnpm's release-age
-  wait), `vite-plus` pinned in the catalog (see the comment in
-  `pnpm-workspace.yaml`), and a root `.formatignore` that re-includes the two
+  wait), and a root `.formatignore` that re-includes the two
   single-file corpora for tsv (see "Why the corpus must stay a git repo").
 
 ## Layout
