@@ -116,13 +116,13 @@ export function createFormatters(projectRoot, configDir) {
   // .svelte-only bench-svelte corpus that oxfmt leg spawns on zero files — the
   // startup cost is part of its shipped directory posture, so it stays.
   const rsvelteBin = `${projectRoot}/node_modules/.bin/rsvelte-fmt`;
-  // @fuzdev/tsv_wasm ships tsv's CLI as a Node script over the WASM engine —
+  // @fuzdev/tsv-wasm ships tsv's CLI as a Node script over the WASM engine —
   // one source, shipped verbatim as the bin of that package and as the native
   // @fuzdev/tsv's fallback. Addressed by explicit path rather than through
   // `node_modules/.bin/tsv`, because both packages claim that same bin name:
   // which one owns the shim is the package manager's call, and this row has to
   // be the WASM one every time.
-  const tsvWasmCli = `${projectRoot}/node_modules/@fuzdev/tsv_wasm/cli.js`;
+  const tsvWasmCli = `${projectRoot}/node_modules/@fuzdev/tsv-wasm/cli.js`;
 
   // NOTE: Do not use `--experimental-cli`, as it seems to behave differently than the stable CLI...
   return {

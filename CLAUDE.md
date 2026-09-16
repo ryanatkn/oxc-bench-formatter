@@ -24,7 +24,7 @@ A benchmark suite comparing JS/TS formatters on **execution time** (via
 - **tsv-npm** (`@fuzdev/tsv`'s `tsv` bin) — the same native binary reached
   through the package's Node dispatcher, the way `npx tsv` and most npm installs
   run it. Runs only in `bench-tsv-delivery`, against native tsv. Also fork-added.
-- **tsv-wasm** (`@fuzdev/tsv_wasm`) — the same tsv CLI source over a WASM engine
+- **tsv-wasm** (`@fuzdev/tsv-wasm`) — the same tsv CLI source over a WASM engine
   in Node; the distribution anyone on a platform without a prebuilt native binary
   falls back to. Runs only in `bench-tsv-delivery`, against native tsv. Also
   fork-added.
@@ -64,7 +64,7 @@ is upstream's, untouched.
 - **`shared/utils.mjs`** carries the fork-owned preflight, scope, and provenance
   machinery; `preflight-selftest.mjs` (run first by `bench-all.mjs`) guards it.
 - **Tooling**: `.node-version` pinned to 24, `@rsvelte/fmt`, `@fuzdev/tsv` and
-  `@fuzdev/tsv_wasm` added (with `@fuzdev/*` excluded from pnpm's release-age
+  `@fuzdev/tsv-wasm` added (with `@fuzdev/*` excluded from pnpm's release-age
   wait), and a root `.formatignore` that re-includes the two
   single-file corpora for tsv (see "Why the corpus must stay a git repo").
 
@@ -701,7 +701,7 @@ formatters, on `.svelte` files only.
 
 ## The tsv-wasm row (bench-tsv-delivery)
 
-[`@fuzdev/tsv_wasm`](https://www.npmjs.com/package/@fuzdev/tsv_wasm) is the third
+[`@fuzdev/tsv-wasm`](https://www.npmjs.com/package/@fuzdev/tsv-wasm) is the third
 fork-added formatter, and the only one that isn't a different _formatter_ at all:
 it is tsv's own CLI over a WASM engine, the distribution anyone on a platform
 without a prebuilt native binary falls back to. It runs in one scenario,
@@ -714,7 +714,7 @@ without a prebuilt native binary falls back to. It runs in one scenario,
   and rsvelte-fmt are both benched through their Node launchers). Nothing benched
   against tsv is a WASM build, so a WASM row there would only blur hyperfine's
   `Summary` ratios across two different questions.
-- **Binary**: `node <projectRoot>/node_modules/@fuzdev/tsv_wasm/cli.js`. A
+- **Binary**: `node <projectRoot>/node_modules/@fuzdev/tsv-wasm/cli.js`. A
   devDependency, so `pnpm install` covers it — but addressed by _path_ rather
   than through `node_modules/.bin/tsv`, because the native `@fuzdev/tsv` claims
   that same `tsv` bin name: with both installed, whichever landed last would own
@@ -741,7 +741,7 @@ without a prebuilt native binary falls back to. It runs in one scenario,
   instance's linear memory, which is the honest figure for this distribution but
   not an engine-vs-engine comparison with the native binary's RSS.
 - **Version**: read from the installed package's `package.json` by
-  `bench-all-and-update-readme.mjs` and published as `**tsv_wasm**` in the
+  `bench-all-and-update-readme.mjs` and published as `**tsv-wasm**` in the
   README's `## Versions` list. The mirror image of the native binary's situation:
   the WASM CLI has no `--version` flag but does have an npm manifest, where the
   native binary has the flag and no manifest.

@@ -133,14 +133,14 @@ async function getVersions() {
       tsv = `${tsv} (@${name})`;
     }
 
-    // @fuzdev/tsv_wasm is an npm package, but not one `vp exec` can reach: its
+    // @fuzdev/tsv-wasm is an npm package, but not one `vp exec` can reach: its
     // bin is named `tsv`, the same name the native @fuzdev/tsv claims, so the
     // harness addresses its cli.js by path and there is no bin to ask. Its CLI
     // has no --version flag either (the native one does), so the installed
     // package's own manifest is the source — still the artifact that ran.
     let tsvWasm = "unknown";
     try {
-      const pkg = JSON.parse(await readFile("node_modules/@fuzdev/tsv_wasm/package.json", "utf-8"));
+      const pkg = JSON.parse(await readFile("node_modules/@fuzdev/tsv-wasm/package.json", "utf-8"));
       tsvWasm = pkg.version;
     } catch {
       // not installed — the tsv-wasm row is missing from the results anyway

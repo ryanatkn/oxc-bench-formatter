@@ -6,7 +6,7 @@
 // `@fuzdev/tsv-<triple>` platform package (or a local build via `TSV_BIN`); that
 // same binary reached through `@fuzdev/tsv`'s `tsv` bin, a Node dispatcher that
 // spawns it — the way `npx tsv` and most npm installs run it; and
-// `@fuzdev/tsv_wasm`, which runs the same CLI source over a WASM engine in Node
+// `@fuzdev/tsv-wasm`, which runs the same CLI source over a WASM engine in Node
 // and is the universal fallback on platforms with no prebuilt binary. Same
 // formatter, same output — three very different deliveries.
 //
