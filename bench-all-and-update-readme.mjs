@@ -191,8 +191,8 @@ ${benchmarkResults}
   // Update versions section. The trailing machine line is optional in the match
   // so this still works against a README written before it existed.
   const versionsRegex =
-    /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*rsvelte-fmt\*\*: .*\n- \*\*tsv\*\*: .*(\n- \*\*tsv_wasm\*\*: .*)?(\n\n_Measured on: .*_)?/;
-  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **rsvelte-fmt**: ${versions.rsvelte}\n- **tsv**: ${versions.tsv}\n- **tsv_wasm**: ${versions.tsvWasm}\n\n_Measured on: ${describeMachine()} — the ratios below depend on the core count._`;
+    /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*rsvelte-fmt\*\*: .*\n- \*\*tsv\*\*: .*(\n- \*\*tsv-wasm\*\*: .*)?(\n\n_Measured on: .*_)?/;
+  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **rsvelte-fmt**: ${versions.rsvelte}\n- **tsv**: ${versions.tsv}\n- **tsv-wasm**: ${versions.tsvWasm}\n\n_Measured on: ${describeMachine()} — the ratios below depend on the core count._`;
 
   if (!versionsRegex.test(readmeContent)) {
     // Fail rather than warn: writing fresh numbers under a stale version list is

@@ -79,7 +79,7 @@ node ./bench-tsv-delivery/bench.mjs
 - **Oxfmt**: 0.68.0
 - **rsvelte-fmt**: 0.7.11
 - **tsv**: 0.3.0 (@fuzdev/tsv-linux-x64-gnu)
-- **tsv_wasm**: 0.3.0
+- **tsv-wasm**: 0.3.0
 
 _Measured on: AMD Ryzen 5 PRO 7530U with Radeon Graphics · 12 threads · linux x64 — the ratios below depend on the core count._
 
