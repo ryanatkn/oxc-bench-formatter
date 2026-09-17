@@ -392,6 +392,19 @@ whenever a corpus was missing; it now stops via `assertBenchReady`
 setup`. `update-readme` calls the same check up front, beside its tsv-binary
 check, so an unprepared machine fails in the first second rather than minutes in.
 
+**The `pnpm run` wrapper is the exception, and it's the launcher, not the suite.**
+`package.json` carries upstream's `packageManager` pin, and pnpm's
+`manage-package-manager-versions` resolves that exact version from the npm
+registry on _every_ pnpm invocation inside this repo when the globally installed
+pnpm doesn't match it. Offline that means `pnpm run bench` sits for over a minute
+before falling back to its cached copy — having never reached `bench-all.mjs`, so
+it looks like the benchmark hanging when nothing has started. The opt-outs don't
+help (neither `--config.manage-package-manager-versions=false` nor an `.npmrc`
+entry: the fetch is in pnpm's bootstrap, before config). Two ways around it, both
+verified offline: match the pin with the globally installed pnpm, or skip the
+wrapper — `node bench-all.mjs`, `node bench-all-and-update-readme.mjs`, and
+`vp run …` all start instantly with no network.
+
 External tools required: **hyperfine** (`apt install hyperfine`) and **GNU
 time** (`apt install time` → `/usr/bin/time`; macOS `brew install gnu-time` →
 `gtime`). Without GNU time the timing benchmarks still run; only memory is

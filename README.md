@@ -45,6 +45,13 @@ node ./bench-svelte/bench.mjs
 node ./bench-tsv-delivery/bench.mjs
 ```
 
+Running disconnected: the benchmarks themselves need no network, but `pnpm run`
+does if your globally installed pnpm doesn't match the `packageManager` pin in
+`package.json` — pnpm fetches the pinned version on every invocation in this
+repo, which offline stalls for a minute before the script starts. Either match
+that version or call the scripts directly (`node bench-all.mjs`,
+`node bench-all-and-update-readme.mjs`).
+
 ## Notes
 
 - Each formatter runs on the exact same codebase state (git reset between runs)
