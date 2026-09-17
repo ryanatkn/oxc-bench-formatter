@@ -67,6 +67,10 @@ is upstream's, untouched.
   three) rather than to whichever tool used least memory that run.
 - **`shared/utils.mjs`** carries the fork-owned preflight, scope, and provenance
   machinery; `preflight-selftest.mjs` (run first by `bench-all.mjs`) guards it.
+- **Setup is never auto-run**: upstream's `bench-all.mjs` shells out to
+  `./init.sh` when a corpus is missing; here it stops with `assertBenchReady`, so
+  the one networked step stays outside the benchmark (see Running). `package.json`
+  gained a `setup` script and both workflows an explicit `./init.sh` step.
 - **Tooling**: `.node-version` pinned to 24, `@rsvelte/fmt`, `@fuzdev/tsv` and
   `@fuzdev/tsv-wasm` added (with `@fuzdev/*` excluded from pnpm's release-age
   wait), and a root `.formatignore` that re-includes the two
@@ -78,7 +82,7 @@ is upstream's, untouched.
 bench-formatter/
 ├── bench-all.mjs                    # run every scenario in sequence (`pnpm run bench`)
 ├── bench-all-and-update-readme.mjs  # run + scrape output into README (`pnpm run update-readme`)
-├── init.sh                          # install deps, clone data repos, download parser.ts, check the tsv binary resolves
+├── init.sh                          # the one networked step: install deps, clone data repos, download parser.ts, check the tsv binary resolves
 ├── preflight-selftest.mjs           # verify preflight's matchers still read each tool's diagnostics
 ├── shared/utils.mjs                 # the harness: formatter commands + hyperfine + memory
 ├── bench-large-single-file/         # one scenario per dir (structure below)

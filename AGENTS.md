@@ -9,14 +9,16 @@ Benchmarking suite that compares execution speed and memory usage of JS/TS forma
 ## Commands
 
 ```bash
-# Setup and run all benchmarks
+# Setup (installs dependencies, downloads test data) — the only step that
+# needs the network; the benchmarks themselves read only local files
+pnpm run setup   # ./init.sh
+
+# Run all benchmarks
 pnpm run bench
 
-# Explicit setup (downloads test data)
-./init.sh
 # Run individual scenarios
-pnpm run bench:large-single-file   # TypeScript parser.ts (~540KB single file)
-pnpm run bench:js-no-embedded      # Outline repository (1,925 files)
+node ./bench-large-single-file/bench.mjs   # TypeScript parser.ts (~540KB single file)
+node ./bench-js-no-embedded/bench.mjs      # Outline repository
 
 # Run all benchmarks + auto-update README.md results section
 pnpm run update-readme
