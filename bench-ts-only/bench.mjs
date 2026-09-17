@@ -4,14 +4,12 @@ import { execSync } from "child_process";
 
 import {
   assertScopeConfigsAgree,
+  benchRows,
   benchRunCounts,
   checkGnuTime,
   createFormatters,
   describeCorpus,
   printHeader,
-  runHyperfine,
-  runMemoryBenchmarks,
-  runPreflight,
   setupCwd,
 } from "../shared/utils.mjs";
 
@@ -21,7 +19,8 @@ async function main() {
   setupCwd(import.meta.url);
 
   const dataDir = "./data";
-  const formatters = createFormatters("..", ".");
+  const projectRoot = "..";
+  const formatters = createFormatters(projectRoot, ".");
 
   printHeader("Benchmarking TypeScript-only (non-JSX subset)");
 
@@ -48,76 +47,48 @@ async function main() {
   console.log("- .ts/.js/.mjs only: the common file set every formatter (incl. tsv) supports");
   console.log("");
 
-  // Confirm every formatter accepts the whole corpus before timing it, and abort
-  // the scenario if one doesn't. This is what lets the timed runs below drop
-  // --ignore-failure: a tool that rejects files would otherwise be timed on the
-  // ones it skipped and look faster for it.
-  runPreflight([
-    { name: "prettier", command: formatters.check.prettier(dataDir) },
-    {
-      name: "prettier+oxc-parser",
-      command: formatters.check.prettier(dataDir, "prettierrc-oxc.json"),
-    },
-    { name: "biome", command: formatters.check.biome(dataDir) },
-    { name: "oxfmt", command: formatters.check.oxfmt(dataDir) },
-    { name: "tsv", command: formatters.check.tsv(dataDir) },
-  ]);
-
-  // No --ignore-failure: preflight above has already confirmed every formatter
-  // parses the whole corpus, so the corpus reasons a formatter would exit
-  // non-zero are ruled out before timing starts. What's left is a real crash —
-  // which must fail the scenario rather than be timed as a fast partial run.
-  await runHyperfine([
-    `--warmup=${WARMUP_RUNS}`,
-    `--runs=${BENCHMARK_RUNS}`,
-    "--prepare",
-    prepareCmd,
-    "--shell=bash",
-    "-n=prettier",
-    "-n=prettier+oxc-parser",
-    "-n=biome",
-    "-n=oxfmt",
-    "-n=tsv",
-    formatters.prettier(dataDir),
-    formatters.prettier(dataDir, "prettierrc-oxc.json"),
-    formatters.biome(dataDir),
-    formatters.oxfmt(dataDir),
-    formatters.tsv(dataDir),
-  ]);
-
-  await runMemoryBenchmarks(
+  // tsv runs twice. The other four are timed the way npm installs them, through
+  // a Node bin (biome's spawns its native binary exactly as tsv's dispatcher
+  // does), so tsv-npm is tsv on that same footing and the row to read against
+  // them; the bare-binary tsv row stays as the engine-side figure and the
+  // baseline every ratio is taken against.
+  const oxc = "prettierrc-oxc.json";
+  await benchRows(
     [
       {
         name: "prettier",
         command: formatters.prettier(dataDir),
-        prepare: prepareCmd,
+        check: formatters.check.prettier(dataDir),
       },
       {
         name: "prettier+oxc-parser",
-        command: formatters.prettier(dataDir, "prettierrc-oxc.json"),
-        prepare: prepareCmd,
+        command: formatters.prettier(dataDir, oxc),
+        check: formatters.check.prettier(dataDir, oxc),
       },
       {
         name: "biome",
         command: formatters.biome(dataDir),
-        prepare: prepareCmd,
+        check: formatters.check.biome(dataDir),
       },
       {
         name: "oxfmt",
         command: formatters.oxfmt(dataDir),
-        prepare: prepareCmd,
+        check: formatters.check.oxfmt(dataDir),
       },
       {
-        name: "tsv",
-        command: formatters.tsv(dataDir),
-        prepare: prepareCmd,
+        name: "tsv-npm",
+        command: formatters["tsv-npm"](dataDir),
+        check: formatters.check["tsv-npm"](dataDir),
       },
+      { name: "tsv", command: formatters.tsv(dataDir), check: formatters.check.tsv(dataDir) },
     ],
-    BENCHMARK_RUNS,
-    // Ratios against tsv, the scenario's subject, and a crash in a memory run
-    // aborts the scenario — as it does in the timed pass, which runs without
-    // --ignore-failure.
-    { baseline: "tsv", failOnCrash: true },
+    {
+      projectRoot,
+      warmup: WARMUP_RUNS,
+      runs: BENCHMARK_RUNS,
+      prepare: prepareCmd,
+      baseline: "tsv",
+    },
   );
 
   console.log("");

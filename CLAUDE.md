@@ -23,7 +23,10 @@ A benchmark suite comparing JS/TS formatters on **execution time** (via
   `bench-svelte`, head-to-head with tsv. Also fork-added.
 - **tsv-npm** (`@fuzdev/tsv`'s `tsv` bin) — the same native binary reached
   through the package's Node dispatcher, the way `npx tsv` and most npm installs
-  run it. Runs only in `bench-tsv-delivery`, against native tsv. Also fork-added.
+  run it. Runs beside native tsv in every scenario tsv appears in: in
+  `bench-ts-only`, `bench-large-single-file` and `bench-svelte` it is tsv on the
+  same footing as the other tools' Node bins, in `bench-tsv-delivery` one of the
+  three distributions. Also fork-added.
 - **tsv-wasm** (`@fuzdev/tsv-wasm`) — the same tsv CLI source over a WASM engine
   in Node; the distribution anyone on a platform without a prebuilt native binary
   falls back to. Runs only in `bench-tsv-delivery`, against native tsv. Also
@@ -40,7 +43,7 @@ dependency (not a binary) and, for the same JSX/keyword reasons, runs on a singl
 All sources are ESM `.mjs`. No test framework or hand-rolled linter — quality
 gating is delegated to **vite-plus** (`vp`): `prepare` runs `vp config`, staged
 files run `vp check --fix` (see `vite.config.ts`), and `.vite-hooks/pre-commit`
-runs `vp staged`. Package manager is pnpm 11.4.0; Node is pinned to `24`.
+runs `vp staged`. Package manager is pnpm 11 (pinned by `packageManager`); Node is pinned to `24`.
 
 ## Deviations from upstream
 
@@ -52,8 +55,9 @@ is upstream's, untouched.
   row that is tsv again through its npm dispatcher.
 - **Three scenarios added**: `bench-ts-only`, `bench-svelte`,
   `bench-tsv-delivery` — plus their entries in `bench-all.mjs` and `init.sh`.
-- **`bench-large-single-file`** (upstream's) gained a tsv row, a preflight pass,
-  tsv's style profile on the other four formatters, and lost `--ignore-failure`
+- **`bench-large-single-file`** (upstream's) gained a tsv row and a tsv-npm row,
+  a preflight pass, tsv's style profile on the other four formatters, and lost
+  `--ignore-failure`
   because preflight makes it redundant.
 - **`bench-full-features`** (upstream's): oxfmt's `printWidth` raised to 100 to
   match the prettier width upstream already set there — it was comparing 100
@@ -74,15 +78,15 @@ is upstream's, untouched.
 bench-formatter/
 ├── bench-all.mjs                    # run every scenario in sequence (`pnpm run bench`)
 ├── bench-all-and-update-readme.mjs  # run + scrape output into README (`pnpm run update-readme`)
-├── init.sh                          # install deps, clone data repos, download parser.ts, build tsv
+├── init.sh                          # install deps, clone data repos, download parser.ts, check the tsv binary resolves
 ├── preflight-selftest.mjs           # verify preflight's matchers still read each tool's diagnostics
 ├── shared/utils.mjs                 # the harness: formatter commands + hyperfine + memory
 ├── bench-large-single-file/         # one scenario per dir (structure below)
 ├── bench-js-no-embedded/
 ├── bench-mixed-embedded/
 ├── bench-full-features/
-├── bench-ts-only/                   # non-JSX scenario added by this fork (all 5 formatters incl. tsv)
-├── bench-svelte/                    # Svelte scenario added by this fork (tsv vs rsvelte-fmt only)
+├── bench-ts-only/                   # non-JSX scenario added by this fork (all 5 formatters incl. tsv, plus tsv-npm)
+├── bench-svelte/                    # Svelte scenario added by this fork (tsv + tsv-npm vs rsvelte-fmt only)
 ├── bench-tsv-delivery/              # what each tsv distribution costs (native vs WASM), fork-added
 ├── vite.config.ts / pnpm-workspace.yaml  # vite-plus tooling + catalog
 └── .github/workflows/               # ci.yml, security, update-readme
@@ -123,8 +127,11 @@ all, since all of its rows are tsv and tsv is non-configurable.
     `@fuzdev/tsv` installed for this machine (resolved from that package's real
     location, since pnpm doesn't hoist it). No config file or flags (tsv is
     non-configurable); directory args recurse over `.ts`/`.svelte`/`.css` only.
-  - `"tsv-npm"(files)` → `node <projectRoot>/node_modules/@fuzdev/tsv/bin.js format <files>`
-    — the same binary through its npm dispatcher; `bench-tsv-delivery` only.
+  - `"tsv-npm"(files)` → `<projectRoot>/node_modules/.bin/bench-tsv-npm format <files>`
+    — the same binary through its npm dispatcher (`@fuzdev/tsv/bin.js`); runs
+    wherever native tsv does. `"tsv-wasm"` is the same shape over
+    `.bin/bench-tsv-wasm`. Both bins are shims the harness derives from pnpm's
+    own — `resolveTsvNodeBin`, see "The tsv-npm row".
   - `rsvelte(files)` → `… --config <dir>/oxfmtrc.json <files>` — the
     `@rsvelte/fmt` npm bin (a Node launcher that execs a platform-native binary
     and points it at the project's oxfmt for non-`.svelte` files). Configurable,
@@ -134,7 +141,13 @@ all, since all of its rows are tsv and tsv is non-configurable.
 - **`runHyperfine(args)`** — spawns `hyperfine` (stdio inherited), resolves on exit 0.
 - **`runMemoryBenchmarks(benchmarks, runs, {baseline, failOnCrash})`** /
   `measureMemory` — runs each command under GNU `time -f '%M'` (peak RSS in
-  KB → MB). Auto-detects `gtime` then `/usr/bin/time`; `checkGnuTime()` warns
+  KB → MB). That figure is the **largest single process** in the command's tree,
+  not the tree's sum (`ru_maxrss` takes a max over waited-for children): a
+  launcher and the native binary it spawns are never added together. So biome's
+  and rsvelte-fmt's rows are their native binary's peak without the ~45 MB Node
+  launcher in front of it, tsv-npm's row is the Node dispatcher's own peak with
+  tsv's hidden under it, and the single-process tools (prettier, oxfmt, tsv,
+  tsv-wasm) are whole. It understates the launcher-style tools, never the others. Auto-detects `gtime` then `/usr/bin/time`; `checkGnuTime()` warns
   and skips memory if neither. `baseline` (required) names the row every ratio
   is taken against — tsv in the tsv scenarios, oxfmt in upstream's — so the
   column doesn't re-anchor on whichever tool used least that run; a ratio below
@@ -144,6 +157,16 @@ all, since all of its rows are tsv and tsv is non-configurable.
   counterpart of timing without `--ignore-failure`; without it the run is
   excluded and a `→ … runs crashed` line under the rows says so. A formatter's
   own non-zero exit still counts, as `--ignore-failure` does in the timed pass.
+- **`benchRows(rows, {projectRoot, warmup, runs, prepare, baseline})`** — one
+  scenario's three passes (preflight → hyperfine → memory) from a single
+  `[{name, command, check}]` list, so a row can't be added to one pass and missed
+  in another. Carries the tsv-scenario rules in one place: no `--ignore-failure`,
+  `failOnCrash` on the memory pass, native tsv listed last. The three fork-added
+  scenarios use it; `bench-large-single-file` is upstream's file and keeps
+  upstream's three parallel lists, to hold the merge surface down.
+- **`resolveTsvNodeBin(projectRoot, row)`** / **`warnUnshimmedTsvRows`** — the
+  pnpm-shaped bin shims for the tsv-npm and tsv-wasm rows, and the line a
+  scenario prints when one couldn't be derived. See "The tsv-npm row".
 - **`printHeader`**, **`FORMATTER_NAMES`** — display helpers.
 - **`setupCwd(import.meta.url)`** — each `bench.mjs` chdirs into its own dir so
   relative config/data paths resolve.
@@ -157,15 +180,15 @@ all, since all of its rows are tsv and tsv is non-configurable.
 
 ## Scenarios
 
-| Dir                       | Corpus                                                                             | Reset / prepare                                                    | warmup × runs | Formatters run           |
-| ------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------- | ------------------------ |
-| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                           | `cp parser.ts.bak parser.ts`                                       | 2 × 5         | all 5 (incl. tsv)        |
-| `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                      | `git reset --hard`                                                 | 3 × 10        | all 4 (no tsv — JSX/TSX) |
-| `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)             | `git reset --hard` + rm stray prettier configs                     | 1 × 3         | prettier+oxc, oxfmt      |
-| `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)      | `git reset --hard` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt      |
-| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset (`.ts`/`.js`/`.mjs`) | `git reset --hard` (its own outline checkout)                      | 2 × 5         | all 5 (incl. tsv)        |
-| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section)     | `git reset --hard` (snapshot repo built by `setup-corpus.mjs`)     | 2 × 5         | tsv, rsvelte-fmt         |
-| `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                       | `cp parser.ts.bak parser.ts`                                       | 2 × 5         | tsv, tsv-npm, tsv-wasm   |
+| Dir                       | Corpus                                                                             | Reset / prepare                                                    | warmup × runs | Formatters run             |
+| ------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------- | -------------------------- |
+| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                           | `cp parser.ts.bak parser.ts`                                       | 3 × 20        | all 5 (incl. tsv), tsv-npm |
+| `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                      | `git reset --hard`                                                 | 3 × 10        | all 4 (no tsv — JSX/TSX)   |
+| `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)             | `git reset --hard` + rm stray prettier configs                     | 1 × 3         | prettier+oxc, oxfmt        |
+| `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)      | `git reset --hard` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt        |
+| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset (`.ts`/`.js`/`.mjs`) | `git reset --hard` (its own outline checkout)                      | 2 × 5         | all 5 (incl. tsv), tsv-npm |
+| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section)     | `git reset --hard` (snapshot repo built by `setup-corpus.mjs`)     | 2 × 5         | tsv, tsv-npm, rsvelte-fmt  |
+| `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                       | `cp parser.ts.bak parser.ts`                                       | 3 × 20        | tsv, tsv-npm, tsv-wasm     |
 
 **Quick runs**: the four tsv scenarios (`bench-large-single-file`,
 `bench-ts-only`, `bench-svelte`, `bench-tsv-delivery`) take
@@ -693,7 +716,7 @@ formatters, on `.svelte` files only.
   under them. Rerun if you want numbers; commit the abort if you don't get
   them.
 - **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-svelte/bench.mjs`
-  overrides the 2 × 5 defaults for a fast, low-accuracy smoke run — see "Quick
+  overrides the scenario's default run counts for a fast, low-accuracy smoke run — see "Quick
   runs" under Scenarios for the other three scenarios that take it.
 - **Version**: `vp exec rsvelte-fmt --version` in
   `bench-all-and-update-readme.mjs` (an npm bin, so `vp exec` reaches it where it
@@ -710,15 +733,17 @@ without a prebuilt native binary falls back to. It runs in one scenario,
 - **The question it answers** is what a delivery path costs, not which formatter
   is faster — so it is deliberately kept out of the comparison scenarios. A row
   belongs in one of those if it's the honest counterpart to how the other tools
-  there are measured (that's the argument for a future `tsv-npm` row: prettier
-  and rsvelte-fmt are both benched through their Node launchers). Nothing benched
-  against tsv is a WASM build, so a WASM row there would only blur hyperfine's
-  `Summary` ratios across two different questions.
-- **Binary**: `node <projectRoot>/node_modules/@fuzdev/tsv-wasm/cli.js`. A
-  devDependency, so `pnpm install` covers it — but addressed by _path_ rather
-  than through `node_modules/.bin/tsv`, because the native `@fuzdev/tsv` claims
-  that same `tsv` bin name: with both installed, whichever landed last would own
-  the symlink, and this row has to be the WASM one every time.
+  there are measured (which is why the tsv-npm row is in all three — next
+  section). Nothing benched against tsv is a WASM build, so a WASM row there
+  would only blur hyperfine's `Summary` ratios across two different questions.
+- **Binary**: `node_modules/.bin/bench-tsv-wasm`, a harness-derived bin shim
+  over `@fuzdev/tsv-wasm/cli.js` (a devDependency, so `pnpm install` covers it)
+  — not `node_modules/.bin/tsv`, because the native `@fuzdev/tsv` claims that
+  same `tsv` bin name. pnpm happens to give `.bin/tsv` to this package whenever
+  both are installed (its rule is in the tsv-npm section), but that is the
+  package manager's tie-break, not a contract — a row addressed by that name
+  would change distribution under another package manager or a renamed package,
+  and this row has to be the WASM one every time.
 - **Same CLI source as the native binary** — subcommands, flags, exit codes,
   traversal and hierarchical-ignore rules, diagnostics, and the
   `N would change, M unchanged` summary line, all identical. So it shares tsv's
@@ -748,18 +773,38 @@ without a prebuilt native binary falls back to. It runs in one scenario,
 - **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-tsv-delivery/bench.mjs`,
   as in the other three tsv scenarios.
 
-## The tsv-npm row (bench-tsv-delivery)
+## The tsv-npm row
 
-The third row of `bench-tsv-delivery` is not another build of tsv but another
+Not another build of tsv but another
 way of reaching the same native binary: [`@fuzdev/tsv`](https://www.npmjs.com/package/@fuzdev/tsv)'s
 `tsv` bin, a Node dispatcher that resolves the platform package's binary and
 `spawnSync`s it, forwarding argv, stdio, exit codes and signals verbatim. It is
 how `npx tsv` and most npm installs run tsv, so it is the delivery most users pay
 for: one Node cold start plus a spawn on top of the native row.
 
-- **Binary**: `node <projectRoot>/node_modules/@fuzdev/tsv/bin.js` — addressed
-  by path for the same reason the WASM row is (both packages claim the `tsv` bin
-  name). The binary it dispatches to is the very file the tsv row runs directly.
+It runs in all four tsv scenarios, for two reasons:
+
+- **`bench-ts-only`, `bench-large-single-file` and `bench-svelte`** — as the
+  like-for-like row. prettier, biome, oxfmt and rsvelte-fmt are all timed through
+  `node_modules/.bin/`, a shim that execs Node on the package's bin script;
+  biome's and rsvelte-fmt's then launch a native binary, the same shape as tsv's
+  dispatcher. The bare-binary tsv row
+  skips that Node start, so on its own it overstates what someone who installed
+  tsv from npm sees against those tools — by the most on the single file, where
+  launch is the largest share of a short run. tsv-npm is the row to read against
+  them; native tsv stays as the engine-side figure and the baseline every ratio
+  is taken against, so hyperfine's `Summary` and the memory ratios keep their
+  anchor across regenerations.
+- **`bench-tsv-delivery`** — as one of the three distributions, against native
+  tsv and tsv-wasm.
+
+- **Binary**: `node_modules/.bin/bench-tsv-npm`, a harness-derived bin shim
+  over `@fuzdev/tsv/bin.js` (see the shim entry below for why it isn't
+  `.bin/tsv`). The binary it dispatches to is the very file the tsv row runs
+  directly — unless `TSV_BIN` is set, which redirects only the tsv row: the
+  dispatcher resolves its own platform package and never reads it, so under
+  `TSV_BIN` the two rows are different builds and their gap is not just dispatch
+  cost.
 - **Preflight**: shares all three of tsv's table entries, since the dispatcher
   forwards the binary's output unchanged, plus one signal of its own: the
   warning the dispatcher prints when it cannot run the native binary and falls
@@ -767,6 +812,60 @@ for: one Node cold start plus a spawn on top of the native row.
   the wrong distribution under this row's name. It has its own self-test case.
 - **Reading its numbers**: the difference between this row and the tsv row is
   the dispatch cost, and nothing else — same binary, same file, same thread
-  count. Its memory row is the Node process plus the child.
+  count. Its memory row is **not** the Node process plus the child: GNU time
+  reports the largest single process in the tree, which here is the Node
+  dispatcher (~50 MB) whatever the binary under it uses — so the row is flat
+  across scenarios and says what the launcher costs, not what tsv does. biome's
+  and rsvelte-fmt's rows have the same shape from the other side (their native
+  binary outgrows the launcher, so the launcher is the part not counted).
+- **The bin shim** (`resolveTsvNodeBin`). The other tools' rows go through
+  pnpm's `node_modules/.bin/<tool>`, a generated `sh` script (`dirname`, `sed`,
+  `uname`, a `command -v node`, then `exec node <bin script>`). Measured here
+  with `hyperfine -N`: `.bin/biome --version` 34.3 ms against
+  `node …/@biomejs/biome/bin/biome --version` 31.1 ms, so **~3 ms** per
+  invocation — small against the multi-file rows, ~6% of this row on the single
+  file. Run as `node <script>` by path, this row and tsv-wasm's would skip it:
+  an edge no other row gets. (An npm install has no such script — its `.bin`
+  entries are symlinks run through the `#!/usr/bin/env node` shebang — so it is
+  a pnpm artifact of this harness, not a cost tsv dodges in the wild; but the
+  rows have to pay the same one.)
+
+  They can't use `.bin/tsv`: `@fuzdev/tsv` and `@fuzdev/tsv-wasm` both declare a
+  `tsv` bin, and pnpm resolves the conflict deterministically — the package
+  whose name _equals_ the bin name wins, else the name that sorts higher
+  (`compareCommandsInConflict` in pnpm's bin linker:
+  `a.pkgName.localeCompare(b.pkgName)`). Neither is named `tsv`, and
+  `@fuzdev/tsv-wasm` sorts after `@fuzdev/tsv`, so with both installed
+  `.bin/tsv` is **always the WASM CLI** (the `# cmd-shim-target=` line at the
+  bottom of the shim says which).
+
+  So the harness writes each row a shim of its own, `.bin/bench-tsv-npm` and
+  `.bin/bench-tsv-wasm`, **derived from the `.bin/tsv` pnpm did write**: that
+  script with its package's three path spellings (the exec lines' relative
+  target, the trailer's absolute one, NODE_PATH's store directories) swapped for
+  this row's. Copying the live script rather than carrying a template is the
+  point — the cost tracks whatever pnpm version installed the other tools, and
+  the WASM shim comes out byte-identical to pnpm's. It lives in `.bin/` because
+  the script addresses its target relative to itself; it is rewritten only when
+  its text would change. The result is validated before use (every `exec` line
+  names this row's script, none names the other package's, the target exists);
+  anything else — no `cmd-shim-target` trailer (npm, yarn), a package missing, a
+  shim whose shape moved — falls back to `node <script>` by path, and the
+  scenario prints a `- tsv-npm: no pnpm bin shim to copy …` line into its
+  output so a published table carries the difference with it.
+  `preflight-selftest.mjs` reports the same thing before a run starts.
+
+  Measured with the shim, tsv-npm on `parser.ts` is ~50 ms where by path it was
+  ~45 (hyperfine's own `bash` plus the shim's `sh` and its subprocesses).
+
+  Alternatives considered: moving `@fuzdev/tsv-wasm` into its own workspace
+  member so both packages get real pnpm shims (clean, but a new workspace
+  package and a lockfile change for ~3 ms); and the fix at the source, a
+  non-colliding bin name on `@fuzdev/tsv-wasm` — which would also stop anyone
+  who installs both under pnpm from silently getting the WASM CLI from `tsv`,
+  and would let this derivation be deleted in favour of the real bins. Not an
+  option: invoking every tool as `node <bin script>`, which levels the rows by
+  taking upstream's off the path their users run.
+
 - **Version**: the platform package's, which is `@fuzdev/tsv`'s — the same
   version the tsv row publishes.

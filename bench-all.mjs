@@ -77,7 +77,7 @@ async function main() {
   console.log("=========================================");
   console.log("");
   console.log(
-    "Formatters: Prettier, Biome, Oxfmt, tsv (JSX-free scenarios), rsvelte-fmt (Svelte scenario), tsv-npm + tsv-wasm (delivery scenario)",
+    "Formatters: Prettier, Biome, Oxfmt, tsv + tsv-npm (JSX-free and Svelte scenarios), rsvelte-fmt (Svelte scenario), tsv-wasm (delivery scenario)",
   );
   console.log("");
 

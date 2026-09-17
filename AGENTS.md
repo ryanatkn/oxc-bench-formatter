@@ -48,13 +48,14 @@ Common logic shared across all scenarios:
 
 - `createFormatters(projectRoot, configDir)` — Returns command builders for every formatter (this fork adds tsv, rsvelte-fmt, tsv-wasm and tsv-npm, plus check-mode counterparts). `projectRoot` is the base for `node_modules`, `configDir` holds config files.
 - `runHyperfine(args)` — Spawns hyperfine process, returns a Promise.
+- `benchRows(rows, options)` — fork-added: runs one `[{name, command, check}]` list through preflight, hyperfine and the memory pass, so the three can't drift apart. The fork's own scenarios use it; see [CLAUDE.md](CLAUDE.md).
 - `runMemoryBenchmarks()` / `measureMemory()` — Measures Peak RSS via GNU time (`gtime` or `/usr/bin/time`).
 - `checkGnuTime()` — Checks for GNU time availability; warns and skips memory measurement if missing.
 
 ### Adding a New Scenario
 
 1. Create `bench-<name>/` directory with `bench.mjs` and formatter config files
-2. In `bench.mjs`, use `createFormatters()` and `runHyperfine()` from `shared/utils.mjs`
+2. In `bench.mjs`, use `createFormatters()` and `runHyperfine()` from `shared/utils.mjs` (or `benchRows()`, for a scenario tsv runs in)
 3. Add the directory name to the `scenarios` array in `bench-all.mjs`
 4. Add any test data fetching to `init.sh`
 

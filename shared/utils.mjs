@@ -1,7 +1,7 @@
 import { execSync, spawn } from "child_process";
 import { createHash } from "crypto";
 import { createRequire } from "module";
-import { existsSync, readFileSync, realpathSync, statSync } from "fs";
+import { chmodSync, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from "fs";
 import { dirname, join, relative, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -56,6 +56,102 @@ export function resolveTsv(projectRoot) {
   };
 }
 
+/** tsv's two Node-launched distributions: the package and the script its `tsv` bin names. */
+const TSV_NODE_BINS = {
+  "tsv-npm": { pkg: "@fuzdev/tsv", script: "bin.js" },
+  "tsv-wasm": { pkg: "@fuzdev/tsv-wasm", script: "cli.js" },
+};
+
+/**
+ * The command for one of tsv's Node-launched rows, through a bin shim of the
+ * same shape every other tool's row goes through.
+ *
+ * prettier, biome, oxfmt and rsvelte-fmt are run as `node_modules/.bin/<tool>`,
+ * which under pnpm is a generated `sh` script (`dirname`, `sed`, `uname`,
+ * `command -v node`, then `exec node <script>`) costing ~3 ms per invocation.
+ * tsv's two rows can't use theirs: `@fuzdev/tsv` and `@fuzdev/tsv-wasm` both
+ * declare a `tsv` bin and pnpm links only one (the package name that sorts
+ * higher, so the WASM one). Running them as `node <script>` instead would skip
+ * those ~3 ms — an edge no other row gets, and ~6% of tsv-npm on a single file.
+ *
+ * So each row gets a shim of its own, `node_modules/.bin/bench-<row>`, derived
+ * from the `.bin/tsv` pnpm did write: that script with its package's paths
+ * swapped for this row's. Copying the live shim rather than carrying a template
+ * is the point — the cost tracks whatever pnpm version installed the others. It
+ * lives in `.bin/` because the shim addresses its target relative to itself.
+ *
+ * Returns `{command, shim}`. `shim` is false when no pnpm shim could be derived
+ * (another package manager, a package missing, a shim whose shape moved); the
+ * command then falls back to `node <script>` by path, and `warnUnshimmedTsvRows`
+ * says so in the scenario's output rather than let the difference pass unseen.
+ */
+export function resolveTsvNodeBin(projectRoot, row) {
+  const { pkg, script } = TSV_NODE_BINS[row];
+  const modules = resolve(projectRoot, "node_modules");
+  const fallback = { command: `node ${projectRoot}/node_modules/${pkg}/${script}`, shim: false };
+  try {
+    const template = readFileSync(join(modules, ".bin/tsv"), "utf8");
+    // pnpm's cmd-shim signs its scripts with the target it execs; without the
+    // trailer this is a symlink or another manager's script, and not the cost
+    // the other rows pay.
+    const target = /^# cmd-shim-target=(.+)$/m.exec(template)?.[1];
+    const from = Object.values(TSV_NODE_BINS).find(
+      (bin) => target === join(modules, bin.pkg, bin.script),
+    );
+    if (!from) return fallback;
+
+    // Three spellings of the template's package appear in the script: the exec
+    // lines' `../<pkg>/<script>`, the trailer's absolute target, and NODE_PATH's
+    // store directories. Longest first, so a prefix never rewrites its own tail.
+    const fromReal = realpathSync(join(modules, from.pkg));
+    const toReal = realpathSync(join(modules, pkg));
+    const storeModules = (real, name) => real.slice(0, -`/${name}`.length);
+    const text = [
+      [join(modules, from.pkg, from.script), join(modules, pkg, script)],
+      [`../${from.pkg}/${from.script}`, `../${pkg}/${script}`],
+      [fromReal, toReal],
+      [storeModules(fromReal, from.pkg), storeModules(toReal, pkg)],
+    ].reduce((t, [a, b]) => t.replaceAll(a, b), template);
+
+    // A shim that still names the other package, or never names this one, is a
+    // shim for the wrong distribution under this row's name.
+    const other = Object.values(TSV_NODE_BINS).find((bin) => bin.pkg !== pkg);
+    const execs = [...text.matchAll(/^\s*exec .*$/gm)].map((m) => m[0]);
+    if (
+      execs.length === 0 ||
+      !execs.every((line) => line.includes(`/../${pkg}/${script}"`)) ||
+      text.includes(`${other.pkg}/${other.script}`) ||
+      !existsSync(join(toReal, script))
+    ) {
+      return fallback;
+    }
+
+    const path = join(modules, `.bin/bench-${row}`);
+    if (!existsSync(path) || readFileSync(path, "utf8") !== text) writeFileSync(path, text);
+    chmodSync(path, 0o755);
+    return { command: `${projectRoot}/node_modules/.bin/bench-${row}`, shim: true };
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Say so when a tsv row in `names` is running by path instead of through a shim.
+ * Printed into the scenario's output, so a published table whose tsv rows skipped
+ * the launch cost the others paid carries that fact with it. The README's consumer
+ * (tsv.fuz.dev) reads the `- <row>: no pnpm bin shim to copy` prefix to show it
+ * under the table, so keep that much of the wording stable.
+ */
+export function warnUnshimmedTsvRows(projectRoot, names) {
+  for (const row of names.filter((name) => name in TSV_NODE_BINS)) {
+    if (!resolveTsvNodeBin(projectRoot, row).shim) {
+      console.log(
+        `- ${row}: no pnpm bin shim to copy — run as \`node <script>\`, skipping the ~3 ms shim the .bin rows pay`,
+      );
+    }
+  }
+}
+
 export { FORMATTER_NAMES };
 
 export function setupCwd(importMetaUrl) {
@@ -107,10 +203,10 @@ export function createFormatters(projectRoot, configDir) {
   const tsvBin = resolveTsv(projectRoot).bin;
   // `@fuzdev/tsv`'s own `tsv` bin is a Node dispatcher that resolves that same
   // platform binary and spawnSyncs it, forwarding argv, stdio, exit codes and
-  // signals — how anyone who installs tsv from npm runs it. Addressed by path
-  // for the same reason the WASM CLI is (below): both packages claim the `tsv`
-  // bin name.
-  const tsvNpmBin = `${projectRoot}/node_modules/@fuzdev/tsv/bin.js`;
+  // signals — how anyone who installs tsv from npm runs it. Run through a bin
+  // shim of the harness's own, as the WASM CLI is (below): both packages claim
+  // the `tsv` bin name — see `resolveTsvNodeBin`.
+  const tsvNpmBin = resolveTsvNodeBin(projectRoot, "tsv-npm").command;
   // rsvelte-fmt (@rsvelte/fmt) is an npm bin wrapping a native binary: it
   // formats .svelte in-process and delegates every other file to oxfmt. On the
   // .svelte-only bench-svelte corpus that oxfmt leg spawns on zero files — the
@@ -118,11 +214,11 @@ export function createFormatters(projectRoot, configDir) {
   const rsvelteBin = `${projectRoot}/node_modules/.bin/rsvelte-fmt`;
   // @fuzdev/tsv-wasm ships tsv's CLI as a Node script over the WASM engine —
   // one source, shipped verbatim as the bin of that package and as the native
-  // @fuzdev/tsv's fallback. Addressed by explicit path rather than through
-  // `node_modules/.bin/tsv`, because both packages claim that same bin name:
-  // which one owns the shim is the package manager's call, and this row has to
-  // be the WASM one every time.
-  const tsvWasmCli = `${projectRoot}/node_modules/@fuzdev/tsv-wasm/cli.js`;
+  // @fuzdev/tsv's fallback. Not run as `node_modules/.bin/tsv`, because both
+  // packages claim that bin name: which one owns it is the package manager's
+  // call (pnpm: the package name that sorts higher, so this one today), and this
+  // row has to be the WASM one every time.
+  const tsvWasmCli = resolveTsvNodeBin(projectRoot, "tsv-wasm").command;
 
   // NOTE: Do not use `--experimental-cli`, as it seems to behave differently than the stable CLI...
   return {
@@ -145,12 +241,12 @@ export function createFormatters(projectRoot, configDir) {
     // Since tsv 0.3 it fans multi-file runs onto node:worker_threads above a
     // file-count threshold; on a single file it is one thread. Also
     // non-configurable, so it takes no config argument either.
-    "tsv-wasm": (files) => `node ${tsvWasmCli} format ${files}`,
+    "tsv-wasm": (files) => `${tsvWasmCli} format ${files}`,
 
     // The native binary again, reached the way `npx tsv` reaches it: through
     // @fuzdev/tsv's Node dispatcher. Same output as the tsv row plus one Node
     // cold start and a spawn — the delivery cost this row exists to measure.
-    "tsv-npm": (files) => `node ${tsvNpmBin} format ${files}`,
+    "tsv-npm": (files) => `${tsvNpmBin} format ${files}`,
 
     // Unlike tsv, rsvelte-fmt is configurable; the scenario's oxfmtrc.json pins
     // it to tsv's fixed style (printWidth 100, tabs, single quotes, no trailing
@@ -170,9 +266,9 @@ export function createFormatters(projectRoot, configDir) {
 
       tsv: (files) => `${tsvBin} format --check ${files}`,
 
-      "tsv-wasm": (files) => `node ${tsvWasmCli} format --check ${files}`,
+      "tsv-wasm": (files) => `${tsvWasmCli} format --check ${files}`,
 
-      "tsv-npm": (files) => `node ${tsvNpmBin} format --check ${files}`,
+      "tsv-npm": (files) => `${tsvNpmBin} format --check ${files}`,
 
       rsvelte: (files) => `${rsvelteBin} --check --config ${configDir}/oxfmtrc.json ${files}`,
     },
@@ -667,6 +763,56 @@ export function runHyperfine(args) {
 
 // ---
 
+/**
+ * Run one scenario's rows through all three passes: preflight, timing, memory.
+ *
+ * `rows` is `[{name, command, check}]` — the write command that gets timed and
+ * its check-mode counterpart — in the order they run. One list instead of the
+ * three parallel ones upstream's scenarios carry (preflight entries, hyperfine's
+ * `-n` names and commands, memory entries), so a row can't be added to one pass
+ * and missed in another. The fork-added scenarios use it; upstream's keep
+ * upstream's shape, to hold the merge surface down.
+ *
+ * Order matters and native tsv goes last: hyperfine runs the commands as given
+ * without interleaving, so on a machine that throttles, later rows meet a warmer
+ * one — keeping that bias pointed against tsv rather than for it.
+ *
+ * Timing runs without `--ignore-failure`: preflight has already confirmed every
+ * formatter accepts the whole corpus, so the corpus reasons a formatter would
+ * exit non-zero are ruled out before timing starts. What's left is a real crash,
+ * which must fail the scenario rather than be timed as a fast partial run — and
+ * `failOnCrash` holds the memory pass to the same rule. Memory ratios are taken
+ * against `baseline`.
+ *
+ * @throws if preflight fails, a timed run exits non-zero, or a memory run crashes
+ */
+export async function benchRows(rows, { projectRoot, warmup, runs, prepare, baseline }) {
+  warnUnshimmedTsvRows(
+    projectRoot,
+    rows.map((row) => row.name),
+  );
+
+  runPreflight(rows.map(({ name, check }) => ({ name, command: check })));
+
+  await runHyperfine([
+    `--warmup=${warmup}`,
+    `--runs=${runs}`,
+    "--prepare",
+    prepare,
+    "--shell=bash",
+    ...rows.map((row) => `-n=${row.name}`),
+    ...rows.map((row) => row.command),
+  ]);
+
+  await runMemoryBenchmarks(
+    rows.map(({ name, command }) => ({ name, command, prepare })),
+    runs,
+    { baseline, failOnCrash: true },
+  );
+}
+
+// ---
+
 // Print benchmark header
 export function printHeader(title) {
   console.log("");
@@ -792,6 +938,11 @@ export function checkGnuTime() {
 }
 
 // Peak RSS of `command` over `runs` runs, or null without GNU time.
+//
+// `%M` is the largest single process in the command's tree, not the tree's sum
+// (ru_maxrss is a max over waited-for children). A Node launcher plus the native
+// binary it spawns therefore reads as whichever is bigger: biome and rsvelte-fmt
+// as their binary, tsv-npm as its ~50 MB dispatcher.
 //
 // Returns `{name, runs, crashes, mean, min, max, stddev}` — `mean` (and the rest)
 // null when no run produced a measurement, `crashes` the number of runs the

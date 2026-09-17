@@ -4,14 +4,12 @@ import { execSync } from "child_process";
 import { existsSync } from "fs";
 
 import {
+  benchRows,
   benchRunCounts,
   checkGnuTime,
   createFormatters,
   describeCorpus,
   printHeader,
-  runHyperfine,
-  runMemoryBenchmarks,
-  runPreflight,
   setupCwd,
 } from "../shared/utils.mjs";
 import {
@@ -28,7 +26,8 @@ async function main() {
   setupCwd(import.meta.url);
 
   const dataDir = "./data";
-  const formatters = createFormatters("..", ".");
+  const projectRoot = "..";
+  const formatters = createFormatters(projectRoot, ".");
 
   printHeader("Benchmarking Svelte (tsv vs rsvelte-fmt)");
 
@@ -73,48 +72,33 @@ async function main() {
   console.log("- .svelte only: the two Svelte-native formatters head-to-head");
   console.log("");
 
-  // Confirm both formatters accept the whole corpus before timing it, and abort
-  // the scenario if one doesn't.
-  runPreflight([
-    { name: "tsv", command: formatters.check.tsv(dataDir) },
-    { name: "rsvelte-fmt", command: formatters.check.rsvelte(dataDir) },
-  ]);
-
-  // No --ignore-failure, unlike the other scenarios: both formatters exit 0 on
-  // a successful write run, so the only non-zero exits here are real errors or
-  // crashes (a nondeterministic SIGABRT has been observed in rsvelte-fmt
-  // 0.7.4 and 0.7.11), and a crashed partial run must fail the benchmark loudly rather
-  // than be timed as a fast pass.
-  await runHyperfine([
-    `--warmup=${WARMUP_RUNS}`,
-    `--runs=${BENCHMARK_RUNS}`,
-    "--prepare",
-    prepareCmd,
-    "--shell=bash",
-    "-n=tsv",
-    "-n=rsvelte-fmt",
-    formatters.tsv(dataDir),
-    formatters.rsvelte(dataDir),
-  ]);
-
-  await runMemoryBenchmarks(
+  // tsv runs twice: rsvelte-fmt is timed through its npm bin, a Node launcher
+  // that execs its native binary, so tsv-npm — tsv through its own Node
+  // dispatcher — is the like-for-like row against it, and bare tsv stays as the
+  // baseline every ratio is taken against. A nondeterministic SIGABRT has been
+  // observed in rsvelte-fmt 0.7.4 and 0.7.11; benchRows fails the scenario on it
+  // rather than time a crashed partial run as a fast pass.
+  await benchRows(
     [
-      {
-        name: "tsv",
-        command: formatters.tsv(dataDir),
-        prepare: prepareCmd,
-      },
       {
         name: "rsvelte-fmt",
         command: formatters.rsvelte(dataDir),
-        prepare: prepareCmd,
+        check: formatters.check.rsvelte(dataDir),
       },
+      {
+        name: "tsv-npm",
+        command: formatters["tsv-npm"](dataDir),
+        check: formatters.check["tsv-npm"](dataDir),
+      },
+      { name: "tsv", command: formatters.tsv(dataDir), check: formatters.check.tsv(dataDir) },
     ],
-    BENCHMARK_RUNS,
-    // Ratios against tsv, the scenario's subject, and a crash in a memory run
-    // aborts the scenario — as it does in the timed pass, which runs without
-    // --ignore-failure.
-    { baseline: "tsv", failOnCrash: true },
+    {
+      projectRoot,
+      warmup: WARMUP_RUNS,
+      runs: BENCHMARK_RUNS,
+      prepare: prepareCmd,
+      baseline: "tsv",
+    },
   );
 
   console.log("");

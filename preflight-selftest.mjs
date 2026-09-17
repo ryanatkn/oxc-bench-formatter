@@ -39,7 +39,12 @@ import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
-import { assertScopeConfigsAgree, createFormatters, runPreflight } from "./shared/utils.mjs";
+import {
+  assertScopeConfigsAgree,
+  createFormatters,
+  resolveTsvNodeBin,
+  runPreflight,
+} from "./shared/utils.mjs";
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));
 
@@ -356,6 +361,20 @@ async function main() {
         console.log(`  scope parity: FAILED — aborted for the wrong reason: ${error.message}`);
       }
     }
+  }
+
+  // tsv's two Node-launched rows run through bin shims the harness derives from
+  // pnpm's own (`resolveTsvNodeBin`), so they pay the launch cost every other
+  // row pays. Not deriving one isn't a failure — without a pnpm install there is
+  // nothing to copy, and the scenarios say so in their output — but a run about
+  // to publish should know before it starts.
+  for (const row of ["tsv-npm", "tsv-wasm"]) {
+    if (skipped.includes(row)) continue;
+    console.log(
+      resolveTsvNodeBin(projectRoot, row).shim
+        ? `  ${row} bin shim: ok (derived from pnpm's .bin/tsv)`
+        : `  ${row} bin shim: NOT derived — this row will run as \`node <script>\`, skipping the shim the .bin rows pay`,
+    );
   }
 
   console.log("");

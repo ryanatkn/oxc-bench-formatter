@@ -12,16 +12,18 @@ import {
   runMemoryBenchmarks,
   runPreflight,
   setupCwd,
+  warnUnshimmedTsvRows,
 } from "../shared/utils.mjs";
 
-const [WARMUP_RUNS, BENCHMARK_RUNS] = benchRunCounts(2, 5);
+const [WARMUP_RUNS, BENCHMARK_RUNS] = benchRunCounts(3, 20);
 
 async function main() {
   setupCwd(import.meta.url);
 
   const dataFile = "./data/parser.ts";
   const dataFileBak = "./data/parser.ts.bak";
-  const formatters = createFormatters("..", ".");
+  const projectRoot = "..";
+  const formatters = createFormatters(projectRoot, ".");
 
   printHeader("Benchmarking Large Single File");
 
@@ -39,6 +41,7 @@ async function main() {
   console.log(`Corpus: ${describeCorpus(dataFile)}`);
   console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
   console.log("- Copy original before each run");
+  warnUnshimmedTsvRows(projectRoot, ["tsv-npm"]);
   console.log("");
 
   // Confirm every formatter accepts the corpus before timing it, and abort the
@@ -53,6 +56,10 @@ async function main() {
     },
     { name: "biome", command: formatters.check.biome(dataFile) },
     { name: "oxfmt", command: formatters.check.oxfmt(dataFile) },
+    // The dispatcher forwards the binary's output verbatim, so this row shares
+    // tsv's matchers; its own signal catches a fallback to the JS CLI, which
+    // would otherwise be timed under the wrong name.
+    { name: "tsv-npm", command: formatters.check["tsv-npm"](dataFile) },
     { name: "tsv", command: formatters.check.tsv(dataFile) },
   ]);
 
@@ -60,6 +67,14 @@ async function main() {
   // parses the whole corpus, so the corpus reasons a formatter would exit
   // non-zero are ruled out before timing starts. What's left is a real crash —
   // which must fail the scenario rather than be timed as a fast partial run.
+  //
+  // tsv runs twice. The other four are timed the way npm installs them, through
+  // a Node bin (biome's spawns its native binary exactly as tsv's dispatcher
+  // does), so tsv-npm is tsv on that same footing and the row to read against
+  // them; the bare-binary tsv row stays as the engine-side figure and the
+  // baseline every ratio is taken against. Native tsv runs last: hyperfine runs
+  // the commands in order without interleaving, so on a machine that throttles,
+  // later rows meet a warmer one — keeping the bias pointed against tsv.
   await runHyperfine([
     `--warmup=${WARMUP_RUNS}`,
     `--runs=${BENCHMARK_RUNS}`,
@@ -70,11 +85,13 @@ async function main() {
     "-n=prettier+oxc-parser",
     "-n=biome",
     "-n=oxfmt",
+    "-n=tsv-npm",
     "-n=tsv",
     formatters.prettier(dataFile),
     formatters.prettier(dataFile, "prettierrc-oxc.json"),
     formatters.biome(dataFile),
     formatters.oxfmt(dataFile),
+    formatters["tsv-npm"](dataFile),
     formatters.tsv(dataFile),
   ]);
 
@@ -98,6 +115,11 @@ async function main() {
       {
         name: "oxfmt",
         command: formatters.oxfmt(dataFile),
+        prepare: prepareCmd,
+      },
+      {
+        name: "tsv-npm",
+        command: formatters["tsv-npm"](dataFile),
         prepare: prepareCmd,
       },
       {

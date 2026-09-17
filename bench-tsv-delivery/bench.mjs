@@ -27,18 +27,16 @@
 import { execSync } from "child_process";
 
 import {
+  benchRows,
   benchRunCounts,
   checkGnuTime,
   createFormatters,
   describeCorpus,
   printHeader,
-  runHyperfine,
-  runMemoryBenchmarks,
-  runPreflight,
   setupCwd,
 } from "../shared/utils.mjs";
 
-const [WARMUP_RUNS, BENCHMARK_RUNS] = benchRunCounts(2, 5);
+const [WARMUP_RUNS, BENCHMARK_RUNS] = benchRunCounts(3, 20);
 
 async function main() {
   setupCwd(import.meta.url);
@@ -47,7 +45,8 @@ async function main() {
   const dataFileBak = "./data/parser.ts.bak";
   // No config directory is used: every row is tsv, which takes no config file
   // or flags. The argument is still passed for the shared signature.
-  const formatters = createFormatters("..", ".");
+  const projectRoot = "..";
+  const formatters = createFormatters(projectRoot, ".");
 
   printHeader("Benchmarking tsv Delivery Paths");
 
@@ -68,62 +67,34 @@ async function main() {
   console.log("");
 
   // The three rows share one CLI source, so they share preflight's tsv matchers
-  // and must report identical counts — which makes the scope cross-check here a
-  // real assertion that all of them are formatting the same file, not three
-  // spellings of one tool trivially agreeing. The npm row's preflight also
-  // catches the dispatcher falling back to the JS CLI, which would otherwise be
-  // timed under the wrong name.
-  runPreflight([
-    { name: "tsv-wasm", command: formatters.check["tsv-wasm"](dataFile) },
-    { name: "tsv-npm", command: formatters.check["tsv-npm"](dataFile) },
-    { name: "tsv", command: formatters.check.tsv(dataFile) },
-  ]);
-
-  // No --ignore-failure, as in every tsv scenario: preflight has ruled out the
-  // corpus reasons either row would exit non-zero, so what's left is a real
-  // crash and must fail the scenario rather than be timed as a fast partial run.
-  //
-  // Native tsv runs last, as it does in every other tsv scenario: hyperfine runs
-  // the commands in the order given without interleaving, so on a laptop that
-  // throttles, later rows meet a warmer machine. Keeping tsv last keeps that
-  // bias pointed against it rather than for it.
-  await runHyperfine([
-    `--warmup=${WARMUP_RUNS}`,
-    `--runs=${BENCHMARK_RUNS}`,
-    "--prepare",
-    prepareCmd,
-    "--shell=bash",
-    "-n=tsv-wasm",
-    "-n=tsv-npm",
-    "-n=tsv",
-    formatters["tsv-wasm"](dataFile),
-    formatters["tsv-npm"](dataFile),
-    formatters.tsv(dataFile),
-  ]);
-
-  await runMemoryBenchmarks(
+  // and must report identical counts — which makes the scope cross-check a real
+  // assertion that all of them are formatting the same file, not three spellings
+  // of one tool trivially agreeing. The npm row's preflight also catches the
+  // dispatcher falling back to the JS CLI, which would otherwise be timed under
+  // the wrong name. Both Node rows run through a pnpm-shaped bin shim, as the
+  // other tools' rows do everywhere else (`resolveTsvNodeBin`), so the gaps here
+  // are what `tsv` costs from a package.json script, shim included.
+  await benchRows(
     [
       {
         name: "tsv-wasm",
         command: formatters["tsv-wasm"](dataFile),
-        prepare: prepareCmd,
+        check: formatters.check["tsv-wasm"](dataFile),
       },
       {
         name: "tsv-npm",
         command: formatters["tsv-npm"](dataFile),
-        prepare: prepareCmd,
+        check: formatters.check["tsv-npm"](dataFile),
       },
-      {
-        name: "tsv",
-        command: formatters.tsv(dataFile),
-        prepare: prepareCmd,
-      },
+      { name: "tsv", command: formatters.tsv(dataFile), check: formatters.check.tsv(dataFile) },
     ],
-    BENCHMARK_RUNS,
-    // Ratios against tsv, the scenario's subject, and a crash in a memory run
-    // aborts the scenario — as it does in the timed pass, which runs without
-    // --ignore-failure.
-    { baseline: "tsv", failOnCrash: true },
+    {
+      projectRoot,
+      warmup: WARMUP_RUNS,
+      runs: BENCHMARK_RUNS,
+      prepare: prepareCmd,
+      baseline: "tsv",
+    },
   );
 
   console.log("");
