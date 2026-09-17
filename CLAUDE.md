@@ -174,8 +174,9 @@ all, since all of its rows are tsv and tsv is non-configurable.
 - **`printHeader`**, **`FORMATTER_NAMES`** — display helpers.
 - **`setupCwd(import.meta.url)`** — each `bench.mjs` chdirs into its own dir so
   relative config/data paths resolve.
-- **`assertBenchReady(projectRoot)`** — the corpora-and-dependencies gate
-  `bench-all.mjs` and `update-readme` open with, in place of the old auto-`init.sh`
+- **`assertBenchReady(projectRoot)`** / **`missingBenchSetup`** — the gate
+  `bench-all.mjs` and `update-readme` open with (dependencies, the seven
+  corpora, hyperfine), and the list behind it, which `init.sh` closes on too
   (see "Setup is separate on purpose" under Running).
 - **`benchRunCounts(warmup, runs)`** — a scenario's run counts, with
   `BENCH_WARMUP` / `BENCH_RUNS` overrides for smoke runs (see "Quick runs"
@@ -392,9 +393,19 @@ local, and the version strings come from binaries and manifests already on disk.
 So a run can be started with the machine disconnected, which is also one fewer
 source of noise on a timed run. `bench-all.mjs` used to shell out to `init.sh`
 whenever a corpus was missing; it now stops via `assertBenchReady`
-(`shared/utils.mjs`), listing everything missing at once and naming `pnpm run
-setup`. `update-readme` calls the same check up front, beside its tsv-binary
+(`shared/utils.mjs`), listing everything missing at once and naming `./init.sh`.
+`update-readme` calls the same check up front, beside its tsv-binary
 check, so an unprepared machine fails in the first second rather than minutes in.
+
+`init.sh` closes on that same list (`missingBenchSetup`) rather than on its own
+bookkeeping: none of its steps stop the script, so a clone that failed for want
+of network would otherwise scroll past under a "Setup complete". With anything
+missing it names it and exits non-zero — which is also what fails a CI setup step
+instead of the bench step after it. The tsv binary is deliberately not on the
+list: without one the four tsv scenarios abort, but upstream's three still run,
+so `init.sh` warns and `update-readme` is the one that refuses. On success it
+prints the `node …` forms of the run commands ahead of the `pnpm run` ones, for
+the reason in the next paragraph.
 
 **The `pnpm run` wrapper is the exception, and it's the launcher, not the suite.**
 `package.json` carries upstream's `packageManager` pin, and pnpm's
@@ -415,7 +426,9 @@ on each scenario), but `bench-all-and-update-readme.mjs` shells out to `vp` five
 times — `vp run bench` plus the four npm-bin version reads — and `vp` lives
 nowhere else, so run directly it used to fail at the first one. It now prepends
 that directory itself (`binEnv`), which makes the two invocations equivalent
-rather than making the launcher part of the contract.
+rather than making the launcher part of the contract. It also chdirs to the repo
+root first, since everything else it touches (`README.md`, `node_modules`,
+`vp run bench`) is addressed relative to it.
 
 External tools required: **hyperfine** (`apt install hyperfine`) and **GNU
 time** (`apt install time` → `/usr/bin/time`; macOS `brew install gnu-time` →
@@ -424,7 +437,10 @@ skipped.
 
 `update-readme` scrapes stdout from `vp run bench`, replaces the block between
 `<!-- BENCHMARK_RESULTS_START -->` / `<!-- BENCHMARK_RESULTS_END -->` in
-`README.md`, and refreshes the `## Versions` section. The
+`README.md`, and refreshes the `## Versions` section. The block is written in
+the shape `vp check --fix` leaves it in — blank lines around the fence,
+hyperfine's single-space separator lines emptied — so a regenerated README
+passes the format check as written and its diff is only numbers. The
 prettier/biome/oxfmt/rsvelte-fmt versions come from `vp exec <bin> --version`;
 tsv's from the resolved binary's `--version` — it's a native binary, so `vp exec`
 can't reach it, and asking the binary means the published version names the

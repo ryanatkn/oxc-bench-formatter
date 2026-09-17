@@ -4,7 +4,7 @@ import { exec, execFile } from "child_process";
 import { constants } from "fs";
 import { access, readFile, stat, writeFile } from "fs/promises";
 import os from "os";
-import { dirname, resolve } from "path";
+import { delimiter, dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
 
@@ -12,6 +12,12 @@ import { assertBenchReady, resolveTsv } from "./shared/utils.mjs";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
+
+// Every path below is relative to the repo root — README.md, node_modules, the
+// `vp run bench` it shells out to — so run from there whatever directory the
+// script was started in, as `bench-all.mjs` and the scenarios already do.
+const projectRoot = dirname(fileURLToPath(import.meta.url));
+process.chdir(projectRoot);
 
 /**
  * Child environment with this project's `node_modules/.bin` on PATH.
@@ -25,7 +31,7 @@ const execFileAsync = promisify(execFile);
  */
 const binEnv = {
   ...process.env,
-  PATH: `${resolve(dirname(fileURLToPath(import.meta.url)), "node_modules/.bin")}:${process.env.PATH ?? ""}`,
+  PATH: `${join(projectRoot, "node_modules/.bin")}${delimiter}${process.env.PATH ?? ""}`,
 };
 
 /**
@@ -94,7 +100,12 @@ function extractBenchmarkResults(output) {
     throw new Error("Could not find benchmark results in output");
   }
 
-  const benchmarkSection = benchmarkStartMatch[0].trim();
+  // hyperfine separates its benchmarks with a line holding one space. Dropped
+  // here, along with the blank lines around the fence below, so the block is
+  // written in the shape `vp check --fix` leaves it in: otherwise every
+  // regeneration fails the format check until the pre-commit hook rewrites it,
+  // and the diff carries those lines as noise beside the numbers.
+  const benchmarkSection = benchmarkStartMatch[0].trim().replace(/[ \t]+$/gm, "");
 
   return benchmarkSection;
 }
@@ -203,7 +214,7 @@ ${benchmarkResults}
   const beforeMarker = readmeContent.substring(0, startIndex + startMarker.length);
   const afterMarker = readmeContent.substring(endIndex);
 
-  readmeContent = beforeMarker + "\n" + newBenchmarkContent + "\n" + afterMarker;
+  readmeContent = beforeMarker + "\n\n" + newBenchmarkContent + "\n\n" + afterMarker;
 
   // Update versions section. The trailing machine line is optional in the match
   // so this still works against a README written before it existed.

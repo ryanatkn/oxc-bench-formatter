@@ -1,4 +1,4 @@
-import { execSync, spawn } from "child_process";
+import { execSync, spawn, spawnSync } from "child_process";
 import { createHash } from "crypto";
 import { createRequire } from "module";
 import { chmodSync, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from "fs";
@@ -186,6 +186,31 @@ const REQUIRED_CORPORA = [
 ];
 
 /**
+ * Everything a run needs that isn't in place, one line each; empty when ready.
+ *
+ * The one list both ends of setup read: `assertBenchReady` refuses a run on it,
+ * and `init.sh` closes on it, so "Setup complete" can't be printed over a clone
+ * that failed or a corpus the run is about to refuse. hyperfine is on it because
+ * every scenario needs it — GNU time is not, since without it only the memory
+ * pass is skipped.
+ */
+export function missingBenchSetup(projectRoot = ".") {
+  const missing = [];
+  if (!existsSync(join(projectRoot, "node_modules"))) {
+    missing.push("node_modules/ — dependencies not installed (pnpm install)");
+  }
+  for (const [path, what] of REQUIRED_CORPORA) {
+    if (!existsSync(join(projectRoot, path))) missing.push(`${path} — ${what}`);
+  }
+  if (spawnSync("hyperfine", ["--version"]).error) {
+    missing.push(
+      "hyperfine — not on PATH, and not something init.sh installs (apt/brew install hyperfine)",
+    );
+  }
+  return missing;
+}
+
+/**
  * Refuse to start a run that isn't set up, naming what's missing and the one
  * command that fetches it.
  *
@@ -193,15 +218,15 @@ const REQUIRED_CORPORA = [
  * so a single online `./init.sh` clears the lot.
  */
 export function assertBenchReady(projectRoot = ".") {
-  const missing = REQUIRED_CORPORA.filter(([path]) => !existsSync(join(projectRoot, path)));
-  const noDeps = !existsSync(join(projectRoot, "node_modules"));
-  if (!missing.length && !noDeps) return;
+  const missing = missingBenchSetup(projectRoot);
+  if (!missing.length) return;
 
   console.error("Not set up to benchmark:");
-  if (noDeps) console.error("  - node_modules/ (dependencies not installed)");
-  for (const [path, what] of missing) console.error(`  - ${path} — ${what}`);
+  for (const line of missing) console.error(`  - ${line}`);
   console.error("");
-  console.error("Run `pnpm run setup` (./init.sh) while online; the run itself needs no network.");
+  console.error(
+    "Run `./init.sh` (or `pnpm run setup`) while online; the run itself needs no network.",
+  );
   process.exit(1);
 }
 

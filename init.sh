@@ -2,9 +2,9 @@
 
 # One-time setup, and the only part of this suite that touches the network:
 # dependencies, the four cloned/downloaded corpora, and the pinned Svelte
-# snapshot. `pnpm run bench` and `pnpm run update-readme` no longer call this —
-# they stop and point here when something is missing — so once this has run the
-# machine can be taken offline for the benchmarks themselves.
+# snapshot. The benchmark scripts never call this — they stop and point here when
+# something is missing — so once this has run the machine can be taken offline
+# for the benchmarks themselves. Exits non-zero if a run still couldn't start.
 
 # Install pnpm dependencies
 echo "Installing pnpm dependencies..."
@@ -109,13 +109,12 @@ fi
 # commit pinned in bench-svelte/corpora-pin.mjs — out of the sibling ../corpora
 # checkout if there is one, else a depth-1 fetch from GitHub — into a git-init'd
 # data/ tree. See bench-svelte/setup-corpus.mjs.
-SVELTE_CORPUS_FAILED=""
 if [ ! -d "bench-svelte/data" ]; then
 	echo "Building Svelte corpus for bench-svelte..."
 	# Can still fail (a ../corpora sibling that's behind the pin, no network for
-	# the fetch), so record it and say so at the end rather than letting
-	# "Setup complete!" paper over it.
-	node ./bench-svelte/setup-corpus.mjs || SVELTE_CORPUS_FAILED="1"
+	# the fetch) — it says why itself, and the closing check below reports the
+	# missing data/ rather than letting "Setup complete" paper over it.
+	node ./bench-svelte/setup-corpus.mjs
 else
 	echo "Svelte corpus for bench-svelte already exists"
 fi
@@ -135,9 +134,31 @@ else
 	echo "tsv binary present ($TSV_RESOLVED)"
 fi
 
+# Close on the list a run opens with (missingBenchSetup in shared/utils.mjs,
+# which assertBenchReady refuses to start on), so this can't print "complete"
+# over a clone that failed above or a corpus the run is about to refuse. The tsv
+# binary is left out of it on purpose: without one the tsv scenarios abort, but
+# upstream's three still run.
+MISSING="$(node --input-type=module -e 'import { missingBenchSetup } from "./shared/utils.mjs"; console.log(missingBenchSetup(".").join("\n"))')" ||
+	MISSING="(could not run the readiness check — is node installed?)"
+
 echo ""
-if [ -n "$SVELTE_CORPUS_FAILED" ]; then
-	echo "Setup complete EXCEPT the Svelte corpus — bench-svelte will fail and be skipped."
-else
-	echo "Setup complete! Run 'pnpm run bench' to start benchmarking — no network needed from here."
+if [ -n "$MISSING" ]; then
+	echo "Setup incomplete — the benchmarks refuse to start until these are in place:"
+	echo "$MISSING" | sed 's/^/  - /'
+	echo ""
+	echo "Fix what failed above and rerun ./init.sh (it skips what is already there)."
+	exit 1
 fi
+
+# The node forms first: `pnpm run` fetches the packageManager pin from the
+# registry on every invocation when the installed pnpm doesn't match it, which
+# offline stalls for a minute before the script starts.
+echo "Setup complete — no network needed from here, so the machine can go offline."
+echo ""
+echo "  node bench-all.mjs                     # every scenario          (pnpm run bench)"
+echo "  node bench-all-and-update-readme.mjs   # ...and rewrite README   (pnpm run update-readme)"
+echo "  node ./bench-ts-only/bench.mjs         # one scenario"
+echo ""
+echo "Offline, prefer the node forms: 'pnpm run' stalls for about a minute when the"
+echo "installed pnpm differs from package.json's packageManager pin."
