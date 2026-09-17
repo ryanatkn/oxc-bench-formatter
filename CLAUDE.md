@@ -378,6 +378,10 @@ pnpm run setup                # ./init.sh — deps + corpora; the only networked
 pnpm run bench                # all scenarios
 pnpm run update-readme        # run + rewrite README results/versions sections
 node ./bench-js-no-embedded/bench.mjs   # one scenario directly
+
+# offline — skip the package-manager wrapper (see the pnpm caveat below)
+node bench-all.mjs
+node bench-all-and-update-readme.mjs
 ```
 
 **Setup is separate on purpose, and the network stops there.** `./init.sh` holds
@@ -404,6 +408,14 @@ entry: the fetch is in pnpm's bootstrap, before config). Two ways around it, bot
 verified offline: match the pin with the globally installed pnpm, or skip the
 wrapper — `node bench-all.mjs`, `node bench-all-and-update-readme.mjs`, and
 `vp run …` all start instantly with no network.
+
+Skipping the wrapper costs one thing a package-manager script gives for free:
+`node_modules/.bin` on `PATH`. `bench-all.mjs` never needed it (it spawns `node`
+on each scenario), but `bench-all-and-update-readme.mjs` shells out to `vp` five
+times — `vp run bench` plus the four npm-bin version reads — and `vp` lives
+nowhere else, so run directly it used to fail at the first one. It now prepends
+that directory itself (`binEnv`), which makes the two invocations equivalent
+rather than making the launcher part of the contract.
 
 External tools required: **hyperfine** (`apt install hyperfine`) and **GNU
 time** (`apt install time` → `/usr/bin/time`; macOS `brew install gnu-time` →

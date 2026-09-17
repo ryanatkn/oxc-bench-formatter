@@ -4,12 +4,29 @@ import { exec, execFile } from "child_process";
 import { constants } from "fs";
 import { access, readFile, stat, writeFile } from "fs/promises";
 import os from "os";
+import { dirname, resolve } from "path";
+import { fileURLToPath } from "url";
 import { promisify } from "util";
 
 import { assertBenchReady, resolveTsv } from "./shared/utils.mjs";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
+
+/**
+ * Child environment with this project's `node_modules/.bin` on PATH.
+ *
+ * Every `vp` call below — the benchmark run itself and the four npm-bin version
+ * reads — resolves `vp` from there. A package-manager script gets that for free,
+ * but running this file as `node bench-all-and-update-readme.mjs` does not, and
+ * that invocation is the recommended one when the machine is offline (see the
+ * pnpm caveat in CLAUDE.md). Setting it here keeps the launcher from deciding
+ * whether the script works.
+ */
+const binEnv = {
+  ...process.env,
+  PATH: `${resolve(dirname(fileURLToPath(import.meta.url)), "node_modules/.bin")}:${process.env.PATH ?? ""}`,
+};
 
 /**
  * The tsv binary this run will bench and where it came from — the same
@@ -58,7 +75,7 @@ async function prepareTsv() {
 async function runBenchmark() {
   console.log("Running benchmark...");
   try {
-    const { stdout } = await execAsync("vp run bench");
+    const { stdout } = await execAsync("vp run bench", { env: binEnv });
     return stdout;
   } catch (error) {
     console.error("Error running benchmark:", error);
@@ -86,10 +103,10 @@ async function getVersions() {
   console.log("Fetching versions...");
   try {
     const [prettier, biome, oxfmt, rsvelte] = await Promise.all([
-      execAsync("vp exec prettier --version"),
-      execAsync("vp exec biome --version"),
-      execAsync("vp exec oxfmt --version"),
-      execAsync("vp exec rsvelte-fmt --version"),
+      execAsync("vp exec prettier --version", { env: binEnv }),
+      execAsync("vp exec biome --version", { env: binEnv }),
+      execAsync("vp exec oxfmt --version", { env: binEnv }),
+      execAsync("vp exec rsvelte-fmt --version", { env: binEnv }),
     ]);
 
     // tsv is a native binary, not an npm bin `vp exec` can reach — ask the
