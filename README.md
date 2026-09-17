@@ -27,12 +27,15 @@ Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfm
 ## Run
 
 ```bash
+# One-time setup: dependencies and the test corpora.
+# This is the only step that needs the network — the benchmarks themselves
+# read nothing but local files, so the machine can be offline for them.
+pnpm run setup   # ./init.sh
+
 # Run all benchmarks
-# Automatically setup fixture if not exists
 pnpm run bench
 
-# Or explicit benchmark with manual setup
-./init.sh
+# Or one scenario at a time
 node ./bench-large-single-file/bench.mjs
 node ./bench-js-no-embedded/bench.mjs
 node ./bench-mixed-embedded/bench.mjs

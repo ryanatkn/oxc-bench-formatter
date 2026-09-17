@@ -70,6 +70,13 @@ jobs:
       # without a memory section, so this is required here.
       - run: sudo apt-get install -y time
 
+      # Setup is explicit now: `vp run bench` no longer shells out to init.sh
+      # when a corpus is missing, so that the run itself never touches the
+      # network. Idempotent — it skips the corpora the checkout steps above
+      # already placed and fetches the rest (parser.ts, the bench-svelte
+      # snapshot at its pinned corpora commit).
+      - run: ./init.sh
+
       - run: vp run update-readme
 
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1

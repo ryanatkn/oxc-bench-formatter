@@ -160,6 +160,52 @@ export function setupCwd(importMetaUrl) {
 }
 
 /**
+ * What a benchmark run reads off disk, and the one step that puts it there.
+ *
+ * Every network access in this suite lives in `./init.sh`: `pnpm install`, the
+ * shallow clones of outline (twice), storybook and continue, the pinned
+ * `parser.ts` download, and the fuzdev/corpora fetch `setup-corpus.mjs` falls
+ * back to when there is no sibling checkout. Nothing downstream of it goes to
+ * the network — the formatters are all installed, the corpora are all local, and
+ * the version strings come from the binaries and manifests already on disk — so
+ * the machine can be disconnected between setup and the run.
+ *
+ * That only holds if the run refuses to do setup itself. `bench-all.mjs` used to
+ * shell out to `init.sh` whenever a corpus was missing, which put the whole
+ * network step inside the thing it was supposed to precede, and made an offline
+ * `update-readme` fail minutes in rather than up front.
+ */
+const REQUIRED_CORPORA = [
+  ["bench-large-single-file/data/parser.ts", "TypeScript v5.9.2 parser.ts"],
+  ["bench-js-no-embedded/data", "outline clone"],
+  ["bench-mixed-embedded/data", "storybook clone"],
+  ["bench-full-features/data", "continue clone"],
+  ["bench-ts-only/data", "outline clone (second checkout)"],
+  ["bench-svelte/data", "pinned .svelte snapshot (node ./bench-svelte/setup-corpus.mjs)"],
+  ["bench-tsv-delivery/data/parser.ts", "TypeScript v5.9.2 parser.ts (second copy)"],
+];
+
+/**
+ * Refuse to start a run that isn't set up, naming what's missing and the one
+ * command that fetches it.
+ *
+ * Exits rather than throws, and lists every missing piece rather than the first,
+ * so a single online `./init.sh` clears the lot.
+ */
+export function assertBenchReady(projectRoot = ".") {
+  const missing = REQUIRED_CORPORA.filter(([path]) => !existsSync(join(projectRoot, path)));
+  const noDeps = !existsSync(join(projectRoot, "node_modules"));
+  if (!missing.length && !noDeps) return;
+
+  console.error("Not set up to benchmark:");
+  if (noDeps) console.error("  - node_modules/ (dependencies not installed)");
+  for (const [path, what] of missing) console.error(`  - ${path} — ${what}`);
+  console.error("");
+  console.error("Run `pnpm run setup` (./init.sh) while online; the run itself needs no network.");
+  process.exit(1);
+}
+
+/**
  * A scenario's warmup and benchmark run counts, overridable for a quick
  * low-accuracy smoke run: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-ts-only/bench.mjs`.
  *

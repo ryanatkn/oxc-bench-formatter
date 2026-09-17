@@ -7,7 +7,8 @@
     "update-readme": "node bench-all-and-update-readme.mjs",
     "bench": "node bench-all.mjs",
     "preflight-selftest": "node preflight-selftest.mjs",
-    "prepare": "vp config"
+    "prepare": "vp config",
+    "setup": "./init.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.11",

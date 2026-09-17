@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# One-time setup, and the only part of this suite that touches the network:
+# dependencies, the four cloned/downloaded corpora, and the pinned Svelte
+# snapshot. `pnpm run bench` and `pnpm run update-readme` no longer call this —
+# they stop and point here when something is missing — so once this has run the
+# machine can be taken offline for the benchmarks themselves.
+
 # Install pnpm dependencies
 echo "Installing pnpm dependencies..."
 pnpm install
@@ -133,5 +139,5 @@ echo ""
 if [ -n "$SVELTE_CORPUS_FAILED" ]; then
 	echo "Setup complete EXCEPT the Svelte corpus — bench-svelte will fail and be skipped."
 else
-	echo "Setup complete! Run 'pnpm run bench' to start benchmarking."
+	echo "Setup complete! Run 'pnpm run bench' to start benchmarking — no network needed from here."
 fi

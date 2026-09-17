@@ -170,6 +170,9 @@ all, since all of its rows are tsv and tsv is non-configurable.
 - **`printHeader`**, **`FORMATTER_NAMES`** — display helpers.
 - **`setupCwd(import.meta.url)`** — each `bench.mjs` chdirs into its own dir so
   relative config/data paths resolve.
+- **`assertBenchReady(projectRoot)`** — the corpora-and-dependencies gate
+  `bench-all.mjs` and `update-readme` open with, in place of the old auto-`init.sh`
+  (see "Setup is separate on purpose" under Running).
 - **`benchRunCounts(warmup, runs)`** — a scenario's run counts, with
   `BENCH_WARMUP` / `BENCH_RUNS` overrides for smoke runs (see "Quick runs"
   below). Both are validated and a bad value exits with a one-line message:
@@ -367,11 +370,23 @@ is no longer lopsided by construction.
 ## Running
 
 ```bash
-pnpm install                  # or ./init.sh (also fetches corpora)
-pnpm run bench                # all scenarios; auto-runs ./init.sh if data missing
+pnpm run setup                # ./init.sh — deps + corpora; the only networked step
+pnpm run bench                # all scenarios
 pnpm run update-readme        # run + rewrite README results/versions sections
 node ./bench-js-no-embedded/bench.mjs   # one scenario directly
 ```
+
+**Setup is separate on purpose, and the network stops there.** `./init.sh` holds
+every network access in the suite — `pnpm install`, the four clones/downloads,
+and `setup-corpus.mjs`'s fallback fetch of the pinned corpora commit. Nothing
+downstream reaches the network: the formatters are installed, the corpora are
+local, and the version strings come from binaries and manifests already on disk.
+So a run can be started with the machine disconnected, which is also one fewer
+source of noise on a timed run. `bench-all.mjs` used to shell out to `init.sh`
+whenever a corpus was missing; it now stops via `assertBenchReady`
+(`shared/utils.mjs`), listing everything missing at once and naming `pnpm run
+setup`. `update-readme` calls the same check up front, beside its tsv-binary
+check, so an unprepared machine fails in the first second rather than minutes in.
 
 External tools required: **hyperfine** (`apt install hyperfine`) and **GNU
 time** (`apt install time` → `/usr/bin/time`; macOS `brew install gnu-time` →

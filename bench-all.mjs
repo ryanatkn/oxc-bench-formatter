@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
-import { execSync, spawn } from "child_process";
-import { existsSync } from "fs";
+import { spawn } from "child_process";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
+
+import { assertBenchReady } from "./shared/utils.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -51,26 +52,11 @@ async function runPreflightSelfTest() {
 }
 
 async function main() {
-  // Run setup if needed
-  if (
-    !existsSync("bench-js-no-embedded/data") ||
-    !existsSync("bench-mixed-embedded/data") ||
-    !existsSync("bench-full-features/data") ||
-    !existsSync("bench-large-single-file/data/parser.ts") ||
-    !existsSync("bench-ts-only/data") ||
-    !existsSync("bench-svelte/data") ||
-    !existsSync("bench-tsv-delivery/data/parser.ts")
-  ) {
-    console.log("Running setup...");
-    execSync("./init.sh", { stdio: "inherit" });
-  }
-
-  // Check if node_modules exists
-  if (!existsSync("node_modules")) {
-    console.error("Error: Dependencies not installed!");
-    console.error("Please run 'pnpm run setup' first");
-    process.exit(1);
-  }
+  // Setup is a separate, explicit step rather than something this script runs
+  // for you: `./init.sh` is where every network access in the suite lives, and
+  // keeping it out of the run is what lets the machine be offline for the
+  // benchmark itself. Missing corpora or dependencies stop here, named.
+  assertBenchReady(__dirname);
 
   console.log("=========================================");
   console.log("JavaScript/TypeScript Formatter Benchmark");

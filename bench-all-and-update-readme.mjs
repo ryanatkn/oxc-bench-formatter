@@ -6,7 +6,7 @@ import { access, readFile, stat, writeFile } from "fs/promises";
 import os from "os";
 import { promisify } from "util";
 
-import { resolveTsv } from "./shared/utils.mjs";
+import { assertBenchReady, resolveTsv } from "./shared/utils.mjs";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -210,6 +210,12 @@ ${benchmarkResults}
 
 async function main() {
   try {
+    // Both readiness checks up front, before the multi-minute run: a missing
+    // corpus and a missing tsv binary each cost the README whole scenarios, and
+    // the corpus one is also the only thing here that would want the network.
+    // Setup is `./init.sh`, run separately and while online — everything from
+    // here on reads local files, so the machine can be disconnected first.
+    assertBenchReady(".");
     await prepareTsv();
     const benchmarkOutput = await runBenchmark();
     const results = extractBenchmarkResults(benchmarkOutput);

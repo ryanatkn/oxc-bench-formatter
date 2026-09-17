@@ -64,4 +64,11 @@ jobs:
       # GNU time, for the memory rows (skipped with a notice when absent).
       - run: sudo apt-get install -y time
 
+      # Setup is explicit now: `vp run bench` no longer shells out to init.sh
+      # when a corpus is missing, so that the run itself never touches the
+      # network. Idempotent — it skips the corpora the checkout steps above
+      # already placed and fetches the rest (parser.ts, the bench-svelte
+      # snapshot at its pinned corpora commit).
+      - run: ./init.sh
+
       - run: vp run bench
