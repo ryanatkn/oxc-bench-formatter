@@ -66,8 +66,8 @@ jobs:
         with:
           tool: hyperfine
 
-      # GNU time, for the memory rows — the README consumer refuses a scenario
-      # without a memory section, so this is required here.
+      # GNU time, for the memory rows — without it the published tables and
+      # results.json carry no memory at all, so this is required here.
       - run: sudo apt-get install -y time
 
       # Setup is its own step: `vp run bench` never shells out to init.sh when a
@@ -92,4 +92,7 @@ jobs:
             Benchmark results regenerated on a GitHub runner by a manual dispatch.
             Every row comes from that runner, so the README is comparable within
             itself — but not with rows measured elsewhere. Review as a whole swap.
-          add-paths: README.md
+          # the same run twice: prose for readers, data for tsv.fuz.dev
+          add-paths: |
+            README.md
+            results.json

@@ -10,6 +10,7 @@ import {
   createFormatters,
   describeCorpus,
   printHeader,
+  printTarget,
   setupCwd,
 } from "../shared/utils.mjs";
 import {
@@ -20,7 +21,15 @@ import {
   readSnapshotPin,
 } from "./corpora-pin.mjs";
 
-const [WARMUP_RUNS, BENCHMARK_RUNS] = benchRunCounts(2, 5);
+// Same counts as `bench-ts-only`. This scenario ran 2 × 5 for a while on the
+// theory that every extra rsvelte-fmt invocation compounded its crash-abort
+// odds; measurement retired that: the crash reproduces only on the check pass,
+// and only with stdout and stderr sharing one pipe, which is `runPreflight`'s
+// `2>&1` and nothing else here — hyperfine hands its children no shared pipe and
+// the memory pass runs the one-line write command. So the counts don't move the
+// abort odds, and rsvelte-fmt's RSS spread (tens of MB run to run, against
+// tsv's one or two) is worth more samples than five.
+const [WARMUP_RUNS, BENCHMARK_RUNS] = benchRunCounts(3, 10);
 
 async function main() {
   setupCwd(import.meta.url);
@@ -63,7 +72,7 @@ async function main() {
   // whatever the previous run left formatted.
   execSync(prepareCmd, { stdio: "ignore" });
 
-  console.log(`Target: third-party .svelte corpus (${COLLECTIONS.join(", ")})`);
+  printTarget(`third-party .svelte corpus (${COLLECTIONS.join(", ")})`);
   // The pin names the bytes; the snapshot commit is deterministic over them
   // (see setup-corpus.mjs), so its hash is comparable between machines too.
   console.log(`Corpus: ${describePin()}, snapshot ${describeCorpus(dataDir)}`);
@@ -76,8 +85,8 @@ async function main() {
   // that execs its native binary, so tsv-npm — tsv through its own Node
   // dispatcher — is the like-for-like row against it, and bare tsv stays as the
   // baseline every ratio is taken against. A nondeterministic SIGABRT has been
-  // observed in rsvelte-fmt 0.7.4 and 0.7.11; benchRows fails the scenario on it
-  // rather than time a crashed partial run as a fast pass.
+  // observed in rsvelte-fmt 0.7.4, 0.7.11 and 0.7.23; benchRows fails the
+  // scenario on it rather than time a crashed partial run as a fast pass.
   await benchRows(
     [
       {

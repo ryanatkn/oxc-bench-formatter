@@ -2,13 +2,13 @@
 
 import { exec, execFile } from "child_process";
 import { constants } from "fs";
-import { access, readFile, stat, writeFile } from "fs/promises";
+import { access, readdir, readFile, stat, writeFile } from "fs/promises";
 import os from "os";
 import { delimiter, dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
 
-import { assertBenchReady, resolveTsv } from "./shared/utils.mjs";
+import { assertBenchReady, RESULTS_DIR, resolveTsv } from "./shared/utils.mjs";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -236,6 +236,52 @@ ${benchmarkResults}
   console.log("README updated successfully");
 }
 
+/**
+ * Compose what `results.json` holds: the run's numbers as data, beside the README's prose.
+ *
+ * Each scenario left a record in `results/` (see `shared/utils.mjs`), which
+ * `bench-all.mjs` emptied before the run, so these are this run's and nothing
+ * else's. They are joined here with the same versions and machine line the
+ * README gets, in the order the scenarios ran. tsv.fuz.dev's generator reads
+ * this file, so its keys are a consumed interface: `machine`, `versions` keyed
+ * by formatter name, and `scenarios` of records.
+ */
+async function composeResults(versions, runStartedAt) {
+  const files = (await readdir(RESULTS_DIR)).filter((file) => file.endsWith(".json"));
+  if (files.length === 0) {
+    // Same reasoning as the versions list below: a README with fresh numbers
+    // beside a results.json from an older run is worse than failing.
+    throw new Error(`no scenario records in ${RESULTS_DIR} — the run recorded nothing`);
+  }
+  const records = await Promise.all(
+    files.map(async (file) => JSON.parse(await readFile(join(RESULTS_DIR, file), "utf-8"))),
+  );
+  // `bench-all.mjs` empties `results/` first, but that is its promise, not this
+  // script's: a run that never reached it (a cached `vp run` replaying old
+  // output, say) would leave an earlier run's records to be published as this one's.
+  const stale = records.filter((r) => !(r.started_at >= runStartedAt)).map((r) => r.scenario);
+  if (stale.length > 0) {
+    throw new Error(`records in ${RESULTS_DIR} predate this run: ${stale.join(", ")}`);
+  }
+  const scenarios = records
+    .sort((a, b) => a.started_at - b.started_at)
+    // run bookkeeping, not part of the published shape
+    .map(({ scenario: _scenario, started_at: _startedAt, ...rest }) => rest);
+
+  return {
+    machine: describeMachine(),
+    versions: {
+      prettier: versions.prettier,
+      biome: versions.biome,
+      oxfmt: versions.oxfmt,
+      "rsvelte-fmt": versions.rsvelte,
+      tsv: versions.tsv,
+      "tsv-wasm": versions.tsvWasm,
+    },
+    scenarios,
+  };
+}
+
 async function main() {
   try {
     // Both readiness checks up front, before the multi-minute run: a missing
@@ -245,12 +291,18 @@ async function main() {
     // here on reads local files, so the machine can be disconnected first.
     assertBenchReady(".");
     await prepareTsv();
+    const runStartedAt = Date.now();
     const benchmarkOutput = await runBenchmark();
     const results = extractBenchmarkResults(benchmarkOutput);
     const versions = await getVersions();
+    // Composed before the README is touched and written after it: both can
+    // refuse (no records, no versions section), and each refuses before writing,
+    // so a refusal leaves the pair as it was rather than one fresh and one stale.
+    const data = await composeResults(versions, runStartedAt);
     await updateReadme(results, versions);
+    await writeFile("results.json", `${JSON.stringify(data, null, 2)}\n`);
 
-    console.log("README has been updated with the latest benchmark results");
+    console.log("README and results.json have been updated with the latest benchmark results");
   } catch (error) {
     console.error("Error:", error.message);
     process.exit(1);

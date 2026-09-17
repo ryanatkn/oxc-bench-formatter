@@ -49,7 +49,8 @@ Each `bench.mjs` imports from `shared/utils.mjs`, calls `setupCwd()` to change t
 Common logic shared across all scenarios:
 
 - `createFormatters(projectRoot, configDir)` — Returns command builders for every formatter (this fork adds tsv, rsvelte-fmt, tsv-wasm and tsv-npm, plus check-mode counterparts). `projectRoot` is the base for `node_modules`, `configDir` holds config files.
-- `runHyperfine(args)` — Spawns hyperfine process, returns a Promise.
+- `runHyperfine(args)` — Spawns hyperfine process, returns a Promise. Fork-added: also records the timings from hyperfine's `--export-json`.
+- `printHeader(title)` / `printTarget(target)` — Print the scenario banner and its `Target:` line. Fork-added: they also start and fill the scenario's record, which `update-readme` composes into `results.json`; see [CLAUDE.md](CLAUDE.md).
 - `benchRows(rows, options)` — fork-added: runs one `[{name, command, check}]` list through preflight, hyperfine and the memory pass, so the three can't drift apart. The fork's own scenarios use it; see [CLAUDE.md](CLAUDE.md).
 - `runMemoryBenchmarks()` / `measureMemory()` — Measures Peak RSS via GNU time (`gtime` or `/usr/bin/time`).
 - `checkGnuTime()` — Checks for GNU time availability; warns and skips memory measurement if missing.

@@ -1,11 +1,125 @@
 import { execSync, spawn, spawnSync } from "child_process";
 import { createHash } from "crypto";
 import { createRequire } from "module";
-import { chmodSync, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from "fs";
-import { dirname, join, relative, resolve } from "path";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "fs";
+import { tmpdir } from "os";
+import { basename, dirname, join, relative, resolve } from "path";
 import { fileURLToPath } from "url";
 
 const FORMATTER_NAMES = ["prettier", "prettier+oxc-parser", "biome", "oxfmt"];
+
+// ---
+
+/**
+ * Where each scenario leaves its machine-readable record, one file per scenario
+ * directory. Intermediate and gitignored: `bench-all.mjs` empties it before a
+ * run so a composed report can't mix two runs, and
+ * `bench-all-and-update-readme.mjs` composes the files into the committed
+ * `results.json`.
+ */
+export const RESULTS_DIR = join(dirname(fileURLToPath(import.meta.url)), "../results");
+
+/**
+ * The scenario being recorded, or null before `printHeader` starts one.
+ *
+ * The record is the README block's numbers as data: tsv.fuz.dev reads
+ * `results.json` rather than parsing the console dump, so what the README's
+ * consumer used to scrape line by line — the banner title, the target, the run
+ * counts, the preflight rows, hyperfine's timings, the memory table, an
+ * `→ aborting:` line, an unshimmed row — is collected here by the same functions
+ * that print it, and a scenario can't print one thing and record another. Keys
+ * are snake_case and durations milliseconds, the shape that site's generator
+ * validates; changing a key is a change to that contract.
+ */
+let record = null;
+
+/** What `benchRunCounts` resolved, which runs at module scope, before any record exists. */
+let resolvedRunCounts = null;
+
+function beginRecord(title) {
+  const name = title.replace(/^Benchmarking /, "");
+  record = {
+    // the scenario directory, which `setupCwd` has already made the cwd
+    scenario: basename(process.cwd()),
+    // the slug tsv.fuz.dev keys its per-scenario copy on
+    id: name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, ""),
+    name,
+    started_at: Date.now(),
+    target: "",
+    // Seeded from `benchRunCounts` rather than left for hyperfine's argv to fill:
+    // preflight aborts a scenario without ever reaching hyperfine, and for
+    // `bench-svelte` that is the *common* outcome, so the record it publishes most
+    // often would otherwise report the runs it printed as 0. Still 0 in upstream's
+    // three scenarios until hyperfine finishes; they hard-code their counts.
+    warmup_runs: resolvedRunCounts?.[0] ?? 0,
+    benchmark_runs: resolvedRunCounts?.[1] ?? 0,
+    preflight: [],
+    aborted: undefined,
+    unshimmed: [],
+    timings: [],
+    // the fastest timed row, which `speedups` are taken against — hyperfine's
+    // choice, distinct from the fixed `baseline` the memory ratios anchor on
+    fastest: "",
+    speedups: [],
+    memory: [],
+  };
+  // On exit rather than at the end of `main`: an aborted scenario throws out of
+  // the middle of its run and exits non-zero, and its record — preflight rows and
+  // the abort, no timings — is exactly what has to be published for it.
+  process.once("exit", writeRecord);
+}
+
+function writeRecord() {
+  const { aborted, unshimmed, ...rest } = record;
+  mkdirSync(RESULTS_DIR, { recursive: true });
+  writeFileSync(
+    join(RESULTS_DIR, `${record.scenario}.json`),
+    `${JSON.stringify(
+      {
+        ...rest,
+        ...(aborted === undefined ? null : { aborted }),
+        ...(unshimmed.length === 0 ? null : { unshimmed }),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+/** Empty `RESULTS_DIR`, so the records in it afterwards all come from one run. */
+export function clearResults() {
+  rmSync(RESULTS_DIR, { recursive: true, force: true });
+}
+
+// Records carry more digits than the console prints, not all of them: a
+// microsecond and a kilobyte are below anything these runs resolve, and rounding
+// there keeps a regenerated `results.json` diff to the digits that moved.
+const round = (value, digits) => Number(value.toFixed(digits));
+
+/**
+ * A ratio of two measured means with its uncertainty, both operands' relative
+ * error propagated in quadrature (the standard first-order form for a quotient:
+ * sigma_r/r = sqrt((sigma_a/a)^2 + (sigma_b/b)^2)) — so the uncertainty reflects
+ * the spread of both the formatter and the baseline, not just one. hyperfine's
+ * `Summary` uses the same form.
+ */
+function ratioOf(result, baseline) {
+  const ratio = result.mean / baseline.mean;
+  const rel = Math.hypot(result.stddev / result.mean, baseline.stddev / baseline.mean);
+  return { ratio, stddev: ratio * rel };
+}
 
 /**
  * The native tsv binary to bench, and where it came from.
@@ -95,33 +209,69 @@ export function resolveTsvNodeBin(projectRoot, row) {
     // trailer this is a symlink or another manager's script, and not the cost
     // the other rows pay.
     const target = /^# cmd-shim-target=(.+)$/m.exec(template)?.[1];
-    const from = Object.values(TSV_NODE_BINS).find(
-      (bin) => target === join(modules, bin.pkg, bin.script),
-    );
+    // pnpm addresses the package either through the hoisted `node_modules/<pkg>`
+    // symlink or through the store path that symlink points at, and which one it
+    // writes has moved between installs of the same pnpm — so identify the
+    // package by what the path resolves to, not by how it is spelled.
+    // Null rather than throwing on a path that isn't there: the other row's
+    // package being uninstalled must not cost *this* row its shim.
+    const realOf = (path) => {
+      try {
+        return realpathSync(path);
+      } catch {
+        return null;
+      }
+    };
+    const targetReal = target && realOf(target);
+    const from =
+      targetReal &&
+      Object.values(TSV_NODE_BINS).find(
+        (bin) => targetReal === realOf(join(modules, bin.pkg, bin.script)),
+      );
     if (!from) return fallback;
 
-    // Three spellings of the template's package appear in the script: the exec
-    // lines' `../<pkg>/<script>`, the trailer's absolute target, and NODE_PATH's
-    // store directories. Longest first, so a prefix never rewrites its own tail.
-    const fromReal = realpathSync(join(modules, from.pkg));
-    const toReal = realpathSync(join(modules, pkg));
+    // The template names its package as a directory in four spellings — hoisted
+    // and store, each absolute (the trailer, NODE_PATH) and relative to `.bin/`
+    // (the exec lines) — plus NODE_PATH's store `node_modules` one level up.
+    // Rewrite `<dir>/<script>` for each before the bare `<dir>`, and longest
+    // first within each group, so a prefix never rewrites its own tail.
+    const dirs = (bin) => {
+      const real = realOf(join(modules, bin.pkg));
+      return (
+        real && [real, join(modules, bin.pkg), `../${relative(modules, real)}`, `../${bin.pkg}`]
+      );
+    };
     const storeModules = (real, name) => real.slice(0, -`/${name}`.length);
-    const text = [
-      [join(modules, from.pkg, from.script), join(modules, pkg, script)],
-      [`../${from.pkg}/${from.script}`, `../${pkg}/${script}`],
-      [fromReal, toReal],
+    const [fromDirs, toDirs] = [dirs(from), dirs(TSV_NODE_BINS[row])];
+    // This row's own package has to be installed for a shim to point anywhere.
+    if (!fromDirs || !toDirs) return fallback;
+    const fromReal = fromDirs[0];
+    const toReal = toDirs[0];
+    const swaps = [
+      ...fromDirs.map((dir, i) => [`${dir}/${from.script}`, `${toDirs[i]}/${script}`]),
+      ...fromDirs.map((dir, i) => [dir, toDirs[i]]),
       [storeModules(fromReal, from.pkg), storeModules(toReal, pkg)],
-    ].reduce((t, [a, b]) => t.replaceAll(a, b), template);
+    ];
+    const text = swaps.reduce((t, [a, b]) => t.replaceAll(a, b), template);
 
-    // A shim that still names the other package, or never names this one, is a
-    // shim for the wrong distribution under this row's name.
+    // A shim that still names the other package, or whose exec lines don't all
+    // land on this row's script, is a shim for the wrong distribution under this
+    // row's name. Resolve what each exec line actually points at rather than
+    // matching a spelling, for the same reason the target is resolved above.
     const other = Object.values(TSV_NODE_BINS).find((bin) => bin.pkg !== pkg);
     const execs = [...text.matchAll(/^\s*exec .*$/gm)].map((m) => m[0]);
+    // `wanted` null would make every unresolvable exec line compare equal to it,
+    // i.e. read a shim pointing at nothing as valid — so require it up front.
+    const wanted = realOf(join(toReal, script));
+    const lands = (line) => {
+      const arg = /"\$basedir(?:_win)?\/([^"]+)"\s+"\$@"/.exec(line)?.[1];
+      return arg != null && realOf(resolve(modules, ".bin", arg)) === wanted;
+    };
     if (
+      !wanted ||
       execs.length === 0 ||
-      !execs.every((line) => line.includes(`/../${pkg}/${script}"`)) ||
-      text.includes(`${other.pkg}/${other.script}`) ||
-      !existsSync(join(toReal, script))
+      !execs.every(lands) ||
+      text.includes(`${other.pkg}/${other.script}`)
     ) {
       return fallback;
     }
@@ -138,13 +288,13 @@ export function resolveTsvNodeBin(projectRoot, row) {
 /**
  * Say so when a tsv row in `names` is running by path instead of through a shim.
  * Printed into the scenario's output, so a published table whose tsv rows skipped
- * the launch cost the others paid carries that fact with it. The README's consumer
- * (tsv.fuz.dev) reads the `- <row>: no pnpm bin shim to copy` prefix to show it
- * under the table, so keep that much of the wording stable.
+ * the launch cost the others paid carries that fact with it, and recorded, so
+ * tsv.fuz.dev shows it under the table too.
  */
 export function warnUnshimmedTsvRows(projectRoot, names) {
   for (const row of names.filter((name) => name in TSV_NODE_BINS)) {
     if (!resolveTsvNodeBin(projectRoot, row).shim) {
+      if (record && !record.unshimmed.includes(row)) record.unshimmed.push(row);
       console.log(
         `- ${row}: no pnpm bin shim to copy — run as \`node <script>\`, skipping the ~3 ms shim the .bin rows pay`,
       );
@@ -245,10 +395,11 @@ export function assertBenchReady(projectRoot = ".") {
  * never meant.
  */
 export function benchRunCounts(warmupDefault, runsDefault) {
-  return [
+  resolvedRunCounts = [
     readRunCount("BENCH_WARMUP", warmupDefault, 0),
     readRunCount("BENCH_RUNS", runsDefault, 1),
   ];
+  return [...resolvedRunCounts];
 }
 
 function readRunCount(name, fallback, min) {
@@ -717,8 +868,7 @@ export function runPreflight(checks, { quiet = false } = {}) {
     const changed = readCount(scope.changed, output);
     counts[name] = { considered, changed, reportsConsidered: scope.considered !== undefined };
 
-    // The scope numbers ride on the same line, after the status word the README
-    // consumer reads.
+    // The scope numbers ride on the same line, after the status word.
     const scopeNote = [
       considered === null ? null : `${considered} file${considered === 1 ? "" : "s"}`,
       changed === null ? null : `${changed} would change`,
@@ -800,9 +950,24 @@ export function runPreflight(checks, { quiet = false } = {}) {
     counts,
   };
 
+  // One row per formatter checked, in run order — never for the self-test's
+  // `quiet` passes, which check fixtures rather than a scenario's corpus.
+  if (record && !quiet) {
+    record.preflight = checks.map(({ name }) => ({
+      name,
+      rejected: failures[name]?.length ?? 0,
+      unavailable: unavailable.includes(name),
+      crashed: crashed.includes(name),
+    }));
+  }
+
   if (problems.length > 0) {
     // Abort rather than time a comparison that is no longer apples-to-apples.
     log("  → aborting: this scenario would not measure every formatter on the same work");
+    // The record gets the problems themselves: its rows name a rejection, a launch
+    // failure or a crash, and this says the rest (a scope mismatch, an idle
+    // formatter, an unreadable count).
+    if (record && !quiet) record.aborted = problems.join("; ");
     // The report rides along so a caller that catches (the self-test) can see
     // which formatter failed and how, not just the summary line.
     throw Object.assign(new Error(`preflight failed — ${problems.join("; ")}`), { report });
@@ -815,21 +980,77 @@ export function runPreflight(checks, { quiet = false } = {}) {
 
 // ---
 
-// Run hyperfine benchmark
+/**
+ * Run hyperfine, and record what it measured.
+ *
+ * The console output is unchanged; the numbers are read from hyperfine's own
+ * `--export-json` rather than scraped back out of it, so the record carries full
+ * precision and the run counts the scenario actually passed.
+ */
 export function runHyperfine(args) {
+  const exportPath = join(tmpdir(), `bench-formatter-hyperfine-${process.pid}.json`);
   return new Promise((resolve, reject) => {
-    const proc = spawn("hyperfine", args, { stdio: "inherit" });
+    const fail = (error) => {
+      // A timed run that fails stops the scenario before any number exists, which
+      // the record has to say or it reads as a scenario with nothing under it.
+      if (record) record.aborted = `a timed run failed — ${error.message}`;
+      reject(error);
+    };
+    const proc = spawn("hyperfine", [`--export-json=${exportPath}`, ...args], {
+      stdio: "inherit",
+    });
     // A missing hyperfine is a spawn error, not an exit code; without this it
     // surfaces as an unhandled event rather than the scenario's own failure.
-    proc.on("error", reject);
+    proc.on("error", fail);
     proc.on("close", (code, signal) => {
       if (code !== 0) {
-        reject(new Error(`Hyperfine failed with ${signal ? `signal ${signal}` : `code ${code}`}`));
-      } else {
+        fail(new Error(`Hyperfine failed with ${signal ? `signal ${signal}` : `code ${code}`}`));
+        return;
+      }
+      try {
+        if (record) recordTimings(args, JSON.parse(readFileSync(exportPath, "utf8")).results);
         resolve();
+      } catch (error) {
+        fail(error);
+      } finally {
+        rmSync(exportPath, { force: true });
       }
     });
   });
+}
+
+function recordTimings(args, results) {
+  const count = (flag) => Number(args.find((arg) => arg.startsWith(`--${flag}=`))?.split("=")[1]);
+  record.warmup_runs = count("warmup");
+  record.benchmark_runs = count("runs");
+
+  // hyperfine reports seconds, and a lone run (`BENCH_RUNS=1`) has no spread
+  const SECONDS_TO_MS = 1000;
+  const ms = (seconds) => round((seconds ?? 0) * SECONDS_TO_MS, 3);
+  // `command` is the `-n` name when one was given, which every scenario does
+  record.timings = results.map((r) => ({
+    name: r.command,
+    mean_ms: ms(r.mean),
+    stddev_ms: ms(r.stddev),
+    min_ms: ms(r.min),
+    max_ms: ms(r.max),
+    user_ms: ms(r.user),
+    system_ms: ms(r.system),
+  }));
+
+  // hyperfine's `Summary`: the fastest command, and how much slower each other
+  // one ran, nearest first. It is printed but not exported, so it is recomputed
+  // here from the same means.
+  const stats = results.map((r) => ({ name: r.command, mean: r.mean, stddev: r.stddev ?? 0 }));
+  const fastest = stats.reduce((a, b) => (b.mean < a.mean ? b : a));
+  record.fastest = fastest.name;
+  record.speedups = stats
+    .filter((r) => r !== fastest)
+    .sort((a, b) => a.mean - b.mean)
+    .map((r) => {
+      const { ratio, stddev } = ratioOf(r, fastest);
+      return { name: r.name, ratio: round(ratio, 4), ratio_stddev: round(stddev, 4) };
+    });
 }
 
 // ---
@@ -884,12 +1105,19 @@ export async function benchRows(rows, { projectRoot, warmup, runs, prepare, base
 
 // ---
 
-// Print benchmark header
+// Print benchmark header, and start the scenario's record
 export function printHeader(title) {
+  beginRecord(title);
   console.log("");
   console.log("=========================================");
   console.log(title);
   console.log("=========================================");
+}
+
+/** Print the scenario's one-line corpus label, and record it. */
+export function printTarget(target) {
+  if (record) record.target = target;
+  console.log(`Target: ${target}`);
 }
 
 // ---
@@ -916,9 +1144,9 @@ export async function runMemoryBenchmarks(benchmarks, runs, { baseline, failOnCr
     );
   }
 
-  // Measure everything before printing anything, so an abort leaves no
-  // half-written table: the README's consumer reads a `Memory Usage:` heading
-  // with no rows under it as a parse failure, and no heading as "not measured".
+  // Measure everything before printing or recording anything, so an abort
+  // leaves no half-written table: a scenario's memory is published whole or as
+  // the abort that replaced it.
   const measured = [];
   for (const bench of benchmarks) {
     const result = await measureMemory(bench.name, bench.command, bench.prepare, runs);
@@ -934,6 +1162,9 @@ export async function runMemoryBenchmarks(benchmarks, runs, { baseline, failOnCr
       .join("; ");
     console.log("");
     console.log(`  → aborting: ${detail} — a crash must fail the scenario, not thin its row`);
+    if (record) {
+      record.aborted = `${detail} — a crash must fail the scenario, not thin its row`;
+    }
     throw new Error(`memory measurement failed — ${detail}`);
   }
 
@@ -951,17 +1182,29 @@ export async function runMemoryBenchmarks(benchmarks, runs, { baseline, failOnCr
   const anchor = results.find((r) => r.name === baseline);
   for (const result of results) {
     const parts = [`min: ${result.min.toFixed(1)} MB`, `max: ${result.max.toFixed(1)} MB`];
-    if (anchor && result !== anchor) {
-      parts.push(`${format_ratio(result, anchor)} times more than ${anchor.name}`);
+    const against = anchor && result !== anchor ? ratioOf(result, anchor) : null;
+    if (against) {
+      parts.push(
+        `${against.ratio.toFixed(2)} ± ${against.stddev.toFixed(2)} times more than ${anchor.name}`,
+      );
     }
     console.log(`  ${result.name}: ${result.mean.toFixed(1)} MB (${parts.join(", ")})`);
+    // the same rows as data: a formatter whose every run failed has none, here as there
+    record?.memory.push({
+      name: result.name,
+      mean_mb: round(result.mean, 3),
+      min_mb: round(result.min, 3),
+      max_mb: round(result.max, 3),
+      ...(against
+        ? { ratio: round(against.ratio, 4), ratio_stddev: round(against.stddev, 4) }
+        : null),
+    });
   }
   if (!anchor) {
     console.log(`  → ${baseline} was not measured, so the rows above carry no ratios`);
   }
 
-  // After the rows, so the rows keep the shape the README's consumer parses: a
-  // row built from fewer runs than the header promised has to say so, or a
+  // After the rows: a row built from fewer runs than the header promised has to say so, or a
   // formatter that crashes on part of the corpus publishes a clean-looking mean.
   for (const result of crashed) {
     console.log(
@@ -970,16 +1213,6 @@ export async function runMemoryBenchmarks(benchmarks, runs, { baseline, failOnCr
   }
 
   return results;
-}
-
-// Ratio of two measured means as `x ± y`, propagating both operands' relative
-// error in quadrature (the standard first-order form for a quotient:
-// sigma_r/r = sqrt((sigma_a/a)^2 + (sigma_b/b)^2)) — so the uncertainty reflects
-// the spread of both the formatter and the baseline, not just one.
-function format_ratio(result, baseline) {
-  const ratio = result.mean / baseline.mean;
-  const rel = Math.hypot(result.stddev / result.mean, baseline.stddev / baseline.mean);
-  return `${ratio.toFixed(2)} ± ${(ratio * rel).toFixed(2)}`;
 }
 
 // Detect GNU time binary

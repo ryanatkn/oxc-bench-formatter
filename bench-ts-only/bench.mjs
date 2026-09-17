@@ -10,10 +10,11 @@ import {
   createFormatters,
   describeCorpus,
   printHeader,
+  printTarget,
   setupCwd,
 } from "../shared/utils.mjs";
 
-const [WARMUP_RUNS, BENCHMARK_RUNS] = benchRunCounts(2, 5);
+const [WARMUP_RUNS, BENCHMARK_RUNS] = benchRunCounts(3, 10);
 
 async function main() {
   setupCwd(import.meta.url);
@@ -40,7 +41,7 @@ async function main() {
   // run, and it needs no corpus.
   assertScopeConfigsAgree(".");
 
-  console.log("Target: Outline repository (non-JSX JS/TS subset)");
+  printTarget("Outline repository (non-JSX JS/TS subset)");
   console.log(`Corpus: ${describeCorpus(dataDir)}`);
   console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
   console.log("- Git reset before each run");

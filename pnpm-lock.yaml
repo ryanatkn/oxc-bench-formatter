@@ -33,8 +33,8 @@ importers:
         specifier: ^0.2.2
         version: 0.2.2
       '@rsvelte/fmt':
-        specifier: ^0.7.4
-        version: 0.7.11(@ianvs/prettier-plugin-sort-imports@4.7.1(@prettier/plugin-oxc@0.2.2)(prettier@3.9.6))(@prettier/plugin-oxc@0.2.2)(oxfmt@0.68.0(vite-plus@0.3.1))(prettier@3.9.6)
+        specifier: ^0.7.23
+        version: 0.7.23(@ianvs/prettier-plugin-sort-imports@4.7.1(@prettier/plugin-oxc@0.2.2)(prettier@3.9.6))(@prettier/plugin-oxc@0.2.2)(oxfmt@0.68.0(vite-plus@0.3.1))(prettier@3.9.6)
       oxfmt:
         specifier: ^0.68.0
         version: 0.68.0(vite-plus@0.3.1)
@@ -793,35 +793,35 @@ packages:
     resolution: {integrity: sha512-yscDcAuDtvOfE0c8i8UVP+hjK43VIPpwfMv+73mdkpy12rZWnk5Kl6N6pUneQmaZ3PKTg611zemBHFpMjp9ZnQ==}
     engines: {node: '>=14'}
 
-  '@rsvelte/fmt-darwin-arm64@0.7.11':
-    resolution: {integrity: sha512-pgWUF9dB0f5KM2orV+BUmEQU1RDrNq6xzhMpo5Dfkt/0l55wY0QKW4ydB3debabFgqyEJUfRqYfdP4cLRFHIfw==}
+  '@rsvelte/fmt-darwin-arm64@0.7.23':
+    resolution: {integrity: sha512-Ja6kXCvQNyKYU5++SxShNBvXG1LAw10RiKW0og8sO877Dk5UXA1r3wXUhOb8NSdCwFggc3XkQUvJ9fupe0vb5g==}
     cpu: [arm64]
     os: [darwin]
 
-  '@rsvelte/fmt-darwin-x64@0.7.11':
-    resolution: {integrity: sha512-aVHbVutAwT2Qw1h0uvnHG51UwvxFbeYg7H19xbKipSdOhAq5Y5QB7z5tKRjp5Q0/csaIjSnUC65vDbjqGRP41g==}
+  '@rsvelte/fmt-darwin-x64@0.7.23':
+    resolution: {integrity: sha512-1so1QjwaoF0Nb3hgFAfbaH5NB8hAZbFd674BQFSuJEtsEGYpFkl7/epaEiZkt+6ifef6baokC5wuc3yeXcy7sw==}
     cpu: [x64]
     os: [darwin]
 
-  '@rsvelte/fmt-linux-arm64-gnu@0.7.11':
-    resolution: {integrity: sha512-WDiBmtbsx+TXf1GGZNCGSVg0dPDYHYf9AlmQqA2F7o1APrsMtpt+sHevcHboNkIw64szKRdXxIlimXKhZCR+nQ==}
+  '@rsvelte/fmt-linux-arm64-gnu@0.7.23':
+    resolution: {integrity: sha512-3qR8ybFN2sYXlsYw670x0V8VamTiMUZdnGBWpkQtuz+sKKYWby/DPw/rCvpmZ6JLe26TqNUPmc+PCCdjj401fg==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@rsvelte/fmt-linux-x64-gnu@0.7.11':
-    resolution: {integrity: sha512-YEs0IqHomSOwNMTIpITz9WRkYCFhvT5K1CTmSqn+lV1SQxJAgavO77hPd/FiU+jPpdPXyb57NmMK4zyvqphWkg==}
+  '@rsvelte/fmt-linux-x64-gnu@0.7.23':
+    resolution: {integrity: sha512-qcSDl8sZ4n9Vls35ir4oKHP6Hxy0PkeF9iYZnOkJg8joI34NK0wVtSeKja5xbUmGnRU3MapNX23JtdUOshokLA==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@rsvelte/fmt-win32-x64-msvc@0.7.11':
-    resolution: {integrity: sha512-UiynWt+MHGtudPiDDSZrXvccN0MkS10uTtg2Rzas6niKQUQrjhBsPTbqjmrlf0S3xnCaLz4+J4uC8tuPORGZrw==}
+  '@rsvelte/fmt-win32-x64-msvc@0.7.23':
+    resolution: {integrity: sha512-wSRiC9l7nchsceV5OWEu+zRxzatfY/REFCyxcHvx0CAVa8eqSXaUyucMrFq1ipvcdqOeV/J6kC6CmuJ1h9YJ3g==}
     cpu: [x64]
     os: [win32]
 
-  '@rsvelte/fmt@0.7.11':
-    resolution: {integrity: sha512-PVaGA2HRnZT8I9KHgohpDmrP9N4AUgDyY7xepOU1dDVmcvIrGfrJ171D5HlQ9gEUgv5WX5v3xyL0EQJHTrfCHg==}
+  '@rsvelte/fmt@0.7.23':
+    resolution: {integrity: sha512-fosr25jAJg8cw55s9igQIjOFH0mw+3qeNSUIT/tll4X7MRVqCJo6uMZbHRwf1SNlq/dtV7WfJCsWj8BWrTwb0g==}
     hasBin: true
     peerDependencies:
       oxfmt: '*'
@@ -2040,30 +2040,30 @@ snapshots:
     dependencies:
       oxc-parser: 0.139.0
 
-  '@rsvelte/fmt-darwin-arm64@0.7.11':
+  '@rsvelte/fmt-darwin-arm64@0.7.23':
     optional: true
 
-  '@rsvelte/fmt-darwin-x64@0.7.11':
+  '@rsvelte/fmt-darwin-x64@0.7.23':
     optional: true
 
-  '@rsvelte/fmt-linux-arm64-gnu@0.7.11':
+  '@rsvelte/fmt-linux-arm64-gnu@0.7.23':
     optional: true
 
-  '@rsvelte/fmt-linux-x64-gnu@0.7.11':
+  '@rsvelte/fmt-linux-x64-gnu@0.7.23':
     optional: true
 
-  '@rsvelte/fmt-win32-x64-msvc@0.7.11':
+  '@rsvelte/fmt-win32-x64-msvc@0.7.23':
     optional: true
 
-  '@rsvelte/fmt@0.7.11(@ianvs/prettier-plugin-sort-imports@4.7.1(@prettier/plugin-oxc@0.2.2)(prettier@3.9.6))(@prettier/plugin-oxc@0.2.2)(oxfmt@0.68.0(vite-plus@0.3.1))(prettier@3.9.6)':
+  '@rsvelte/fmt@0.7.23(@ianvs/prettier-plugin-sort-imports@4.7.1(@prettier/plugin-oxc@0.2.2)(prettier@3.9.6))(@prettier/plugin-oxc@0.2.2)(oxfmt@0.68.0(vite-plus@0.3.1))(prettier@3.9.6)':
     dependencies:
       prettier-plugin-tailwindcss: 0.8.1(@ianvs/prettier-plugin-sort-imports@4.7.1(@prettier/plugin-oxc@0.2.2)(prettier@3.9.6))(@prettier/plugin-oxc@0.2.2)(prettier@3.9.6)
     optionalDependencies:
-      '@rsvelte/fmt-darwin-arm64': 0.7.11
-      '@rsvelte/fmt-darwin-x64': 0.7.11
-      '@rsvelte/fmt-linux-arm64-gnu': 0.7.11
-      '@rsvelte/fmt-linux-x64-gnu': 0.7.11
-      '@rsvelte/fmt-win32-x64-msvc': 0.7.11
+      '@rsvelte/fmt-darwin-arm64': 0.7.23
+      '@rsvelte/fmt-darwin-x64': 0.7.23
+      '@rsvelte/fmt-linux-arm64-gnu': 0.7.23
+      '@rsvelte/fmt-linux-x64-gnu': 0.7.23
+      '@rsvelte/fmt-win32-x64-msvc': 0.7.23
       oxfmt: 0.68.0(vite-plus@0.3.1)
     transitivePeerDependencies:
       - '@ianvs/prettier-plugin-sort-imports'

@@ -4,7 +4,7 @@ import { spawn } from "child_process";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 
-import { assertBenchReady } from "./shared/utils.mjs";
+import { assertBenchReady, clearResults } from "./shared/utils.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -69,6 +69,10 @@ async function main() {
 
   await runPreflightSelfTest();
   console.log("");
+
+  // Each scenario leaves a record in `results/`; start from none, so whatever
+  // composes them afterwards reads one run and not the leftovers of another.
+  clearResults();
 
   for (const scenario of scenarios) {
     try {

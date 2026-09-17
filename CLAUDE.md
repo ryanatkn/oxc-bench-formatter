@@ -67,6 +67,10 @@ is upstream's, untouched.
   three) rather than to whichever tool used least memory that run.
 - **`shared/utils.mjs`** carries the fork-owned preflight, scope, and provenance
   machinery; `preflight-selftest.mjs` (run first by `bench-all.mjs`) guards it.
+- **Results are also published as data**: `shared/utils.mjs` records each
+  scenario as it prints it, and `update-readme` composes the records into
+  `results.json` beside the README. The one line every scenario changed for it,
+  upstream's three included, is its `Target:` line, now `printTarget(…)`.
 - **Setup is never auto-run**: upstream's `bench-all.mjs` shells out to
   `./init.sh` when a corpus is missing; here it stops with `assertBenchReady`, so
   the one networked step stays outside the benchmark (see Running). `package.json`
@@ -81,7 +85,9 @@ is upstream's, untouched.
 ```
 bench-formatter/
 ├── bench-all.mjs                    # run every scenario in sequence (`pnpm run bench`)
-├── bench-all-and-update-readme.mjs  # run + scrape output into README (`pnpm run update-readme`)
+├── bench-all-and-update-readme.mjs  # run + scrape output into README, compose results.json (`pnpm run update-readme`)
+├── results.json                     # the last published run as data — what tsv.fuz.dev reads
+├── results/                         # per-scenario records of the last run — gitignored
 ├── init.sh                          # the one networked step: install deps, clone data repos, download parser.ts, check the tsv binary resolves
 ├── preflight-selftest.mjs           # verify preflight's matchers still read each tool's diagnostics
 ├── shared/utils.mjs                 # the harness: formatter commands + hyperfine + memory
@@ -182,9 +188,11 @@ all, since all of its rows are tsv and tsv is non-configurable.
   `BENCH_WARMUP` / `BENCH_RUNS` overrides for smoke runs (see "Quick runs"
   below). Both are validated and a bad value exits with a one-line message:
   hyperfine _hangs_ on `--runs=0` and rejects `--runs=NaN`, so an unchecked typo
-  would wedge the scenario or fail it long after the corpus was set up. Wired
-  into the four tsv scenarios; the three tsv-free ones keep upstream's
-  hard-coded constants.
+  would wedge the scenario or fail it long after the corpus was set up. The
+  resolved counts also seed the scenario's record, so one that preflight aborts
+  before hyperfine runs still publishes the counts it printed rather than 0.
+  Wired into the four tsv scenarios; the three tsv-free ones keep upstream's
+  hard-coded constants (their records take the counts from hyperfine's argv).
 
 ## Scenarios
 
@@ -194,8 +202,8 @@ all, since all of its rows are tsv and tsv is non-configurable.
 | `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                      | `git reset --hard`                                                 | 3 × 10        | all 4 (no tsv — JSX/TSX)   |
 | `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)             | `git reset --hard` + rm stray prettier configs                     | 1 × 3         | prettier+oxc, oxfmt        |
 | `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)      | `git reset --hard` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt        |
-| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset (`.ts`/`.js`/`.mjs`) | `git reset --hard` (its own outline checkout)                      | 2 × 5         | all 5 (incl. tsv), tsv-npm |
-| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section)     | `git reset --hard` (snapshot repo built by `setup-corpus.mjs`)     | 2 × 5         | tsv, tsv-npm, rsvelte-fmt  |
+| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset (`.ts`/`.js`/`.mjs`) | `git reset --hard` (its own outline checkout)                      | 3 × 10        | all 5 (incl. tsv), tsv-npm |
+| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section)     | `git reset --hard` (snapshot repo built by `setup-corpus.mjs`)     | 3 × 10        | tsv, tsv-npm, rsvelte-fmt  |
 | `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                       | `cp parser.ts.bak parser.ts`                                       | 3 × 20        | tsv, tsv-npm, tsv-wasm     |
 
 **Quick runs**: the four tsv scenarios (`bench-large-single-file`,
@@ -256,7 +264,7 @@ the emptiest failure: a `prettierignore` whose allowlist stops matching prints
 follows measures process startup. prettier reports no file count (its per-file
 `[warn]` lines give the would-change count instead), so it sits out the parity
 comparison but not the no-op check. The numbers ride on each preflight line after
-the status word, where the README consumer's parser ignores them.
+the status word; they are printed, not recorded in `results.json`.
 
 Each scenario now runs its `--prepare` command **before** preflight, not just
 between timed runs: the parse check and those counts have to describe the corpus
@@ -485,26 +493,37 @@ are not comparable to each other. Then rerun `update-readme` locally if the merg
 moved a benched formatter's version. `package.json` conflicts are usually the same
 shape: union this fork's added dep with upstream's bump.
 
-**The README results block is a consumed interface.**
+**`results.json` is a consumed interface; the README block is for readers.**
 [tsv.fuz.dev](https://tsv.fuz.dev/docs/benchmarks) renders these numbers on its
-benchmarks page, and since this suite publishes no JSON, its generator parses the
-README: the `<!-- BENCHMARK_RESULTS_START -->` / `END` markers, the
-`=====`-banner scenario headings, hyperfine's `Benchmark N:` / `Time (mean ± σ)` /
-`Range (min … max)` / `Summary` lines, the `Memory Usage:` rows, the preflight
-block (including the `→ aborting:` line, which tells it a scenario was aborted
-rather than misparsed — before timing when it follows the preflight rows, after
-timing when it follows the `Summary`), the `## Versions` list, and the
-`_Measured on: …_` line. Changing any of
-those shapes — or dropping a marker — fails that site's `gro gen` with a message
-naming the scenario and section that stopped parsing (a rename that still parses
-trips its tests instead). It fails loudly rather than quietly publishing stale
-numbers, but it does fail: pair a format change with a fix there.
+benchmarks page, and its generator reads `results.json`, which `update-readme`
+writes beside the README from the same run: `machine`, `versions` keyed by
+formatter name, and one record per scenario in run order — `id` (the slug of the
+banner title, which that site keys its per-scenario copy on), `name`, `target`,
+`warmup_runs` / `benchmark_runs`, the `preflight` rows, `timings` in
+milliseconds from hyperfine's own `--export-json`, `fastest` and `speedups`
+(hyperfine's `Summary`, recomputed from the same means since it isn't exported),
+the `memory` rows in megabytes (their ratios against the scenario's fixed memory
+baseline, which is the one row carrying none — not necessarily `fastest`), and
+`aborted` / `unshimmed` when they apply.
+The records are made by the functions that print the same facts
+(`printHeader`, `printTarget`, `runPreflight`, `runHyperfine`,
+`runMemoryBenchmarks`, `warnUnshimmedTsvRows`) and written on process exit, so
+an aborted scenario is recorded too — preflight rows and its `aborted` reason,
+no timings. That site validates the file against a strict schema: renaming,
+adding or dropping a key fails its `gro gen` with the path that failed (a
+renamed scenario title still validates and trips its tests instead). It fails
+loudly rather than quietly publishing stale numbers, but it does fail: pair a
+shape change with a fix there. `results/` holds the per-scenario records of the
+last run (gitignored; `bench-all.mjs` empties it first so a composed report
+can't mix two runs), and running one scenario directly rewrites only its own
+record, never `results.json`.
 
 ## Adding a formatter or scenario
 
 - **New scenario**: create `bench-<name>/` (copy an existing one), add the dir
   name to the `scenarios` array in `bench-all.mjs`, and add any corpus fetch to
-  `init.sh`.
+  `init.sh`. Print its banner with `printHeader` and its corpus label with
+  `printTarget` — those start and fill the scenario's record in `results.json`.
 - **New formatter**: add a command builder to `createFormatters` in
   `shared/utils.mjs`, then add a `-n=<name>` arg + command to each scenario's
   `runHyperfine([...])` call and a matching entry in its `runMemoryBenchmarks`
@@ -697,9 +716,11 @@ formatters, on `.svelte` files only.
 
 - **Binary**: the `rsvelte-fmt` npm bin — a Node launcher that resolves the
   platform-native binary plus the project's oxfmt and execs it. Every timed run
-  therefore includes one Node cold start, and the memory row measures the whole
-  process tree (launcher + native binary + oxfmt leg) — its shipped CLI
-  posture, same as measuring prettier's Node. On this `.svelte`-only corpus the
+  therefore includes one Node cold start — its shipped CLI posture, same as
+  measuring prettier's Node. The memory row is **not** that tree's sum: `%M`
+  takes a max over waited-for children (see the harness section), and the native
+  binary outgrows the ~45 MB launcher, so the row is the binary's peak and the
+  launcher is the part not counted. On this `.svelte`-only corpus the
   oxfmt delegation leg spawns on zero files (and prints a "No config found"
   notice — the directory hand-off doesn't forward `--config`); that overhead is
   part of how `rsvelte-fmt <dir>` ships, so it deliberately stays.
@@ -755,26 +776,68 @@ formatters, on `.svelte` files only.
   `rm -rf bench-svelte/data && node ./bench-svelte/setup-corpus.mjs`.
 - **No `--ignore-failure`** (alone among the scenarios): both formatters exit 0
   on a successful write run, so any non-zero exit here is a real error — and
-  rsvelte-fmt has a nondeterministic SIGABRT — seen in 0.7.4 and still in 0.7.11,
-  in check mode as well as write mode, and not rare: it hit roughly one run in
-  four over this corpus during one sitting (its launcher
-  propagates signal deaths as exit 128+n, e.g. 134), which must abort the
-  benchmark rather than be timed as a fast partial run. `runPreflight` flags
-  crashed check passes the same way — so expect this scenario to abort more
-  often than not, which is the honest outcome while the crash is real: a retry
-  inside the harness would hide a defect in a tool whose numbers this README
-  publishes. A full run needs rsvelte-fmt to survive its check plus every
-  warmup and timed run back to back, so at a one-in-four crash rate a clean
-  scenario is a few-percent event. **An aborted scenario is publishable.** It
+  rsvelte-fmt has a nondeterministic SIGABRT (its launcher propagates signal
+  deaths as exit 128+n, e.g. 134), which must abort the benchmark rather than be
+  timed as a fast partial run. It is not rare, and it is **not uniform across the
+  scenario's three passes**. Counted over this corpus:
+
+  | version | pass                            | stdio              | crashes  |
+  | ------- | ------------------------------- | ------------------ | -------- |
+  | 0.7.23  | `--check` (what preflight runs) | both on one pipe   | 24 / 100 |
+  | 0.7.23  | `--check`                       | out=pipe, err=file | 0 / 40   |
+  | 0.7.23  | `--check`                       | out=file, err=pipe | 0 / 40   |
+  | 0.7.23  | `--check`                       | both to files      | 0 / 180  |
+  | 0.7.23  | `--check`                       | out=/dev/null      | 0 / 40   |
+  | 0.7.23  | `--check`                       | under hyperfine    | 0 / 30   |
+  | 0.7.23  | write (what the timed runs run) | both on one pipe   | 0 / 210  |
+  | 0.7.23  | write                           | both to files      | 0 / 140  |
+  | 0.7.11  | `--check`                       | both on one pipe   | 8 / 40   |
+  | 0.7.11  | write                           | both on one pipe   | 0 / 40   |
+
+  So the trigger is **not** "a pipe" but stdout and stderr **sharing one** pipe,
+  on the pass that writes bulk output: check mode prints a `would format <path>`
+  line per rewritten file (~2,000) while the launcher and its oxfmt leg write to
+  stderr, and only when both land on the same pipe does it abort. Either stream
+  piped alone is clean, as is `/dev/null` and as is a file. Write mode prints one
+  summary line and has not crashed in 250 shared-pipe runs across both versions.
+
+  That is exactly and only what `runPreflight` does — `execSync(cmd + " 2>&1", {stdio: "pipe"})`
+  — so the whole risk sits in the check pass. **The timed and memory runs carry
+  none of it**: hyperfine does not hand its children a shared pipe (30 runs of the
+  _crash-prone check_ command under it: zero), and the memory pass does merge but
+  runs the one-line write command. So **the run counts do not move the abort
+  odds**, which is why this scenario runs `bench-ts-only`'s 3 × 10.
+
+  **Rate, measured end to end: 32 of 50 attempts at `node bench-svelte/bench.mjs`
+  aborted — about two in three, so a publishable run takes ~3 attempts.** Quote
+  that number, not the per-invocation ones above: crash frequency rises sharply
+  the slower the pipe is drained and the colder the process is, so the same
+  command reads 24/100 piped to `cat`, 12/40 under a bare `execSync`, and ~64%
+  through the real entry point. All 50 aborts were `crashed: rsvelte-fmt`; the
+  preflight row and the record's `aborted` name it correctly every time.
+
+  The abort is not an overreaction to a cosmetic race: a crashed check is
+  **truncated**, twice measured at 514 of 2029 lines and cut at the same file, so
+  ~75% of the corpus went unreported. "No matcher hits" on that output would read
+  as "clean" while most files were never checked — which is precisely what the
+  crashed-check rule exists to refuse. Keeping the merge is therefore deliberate
+  on two counts: the diagnostics really are unusable, and `… 2>&1 | tee` is how
+  CI runs a formatter, so the defect has real exposure and publishing the abort
+  is the honest outcome. (Splitting the streams and concatenating them in JS
+  would dodge the crash and cost nothing in matching — the matchers are per-line
+  — but it would make this harness the one place that stops seeing the bug.)
+  **An aborted scenario is publishable.** It
   writes its banner, preflight rows, and the `→ aborting:` line into the README
-  with no timings under it, and tsv.fuz.dev's generator reads that abort line
-  and renders the scenario as aborted — naming the formatter whose preflight
-  row faulted — rather than dropping it or refusing the README. The memory
-  pass is strict the same way (`failOnCrash`): a run killed by a signal there
-  aborts after timing, so the block carries timings and a `Summary` but no
-  `Memory Usage:` table, and the site renders the times with the abort note
+  with no timings under it, and records the same in `results.json` (`aborted`,
+  the preflight rows, no timings); tsv.fuz.dev renders the scenario as aborted —
+  naming the formatter whose preflight row faulted — rather than dropping it or
+  refusing the report. The memory pass is strict the same way (`failOnCrash`): a
+  run killed by a signal there aborts after timing, so the block carries timings
+  and a `Summary` but no `Memory Usage:` table, the record carries timings and
+  `aborted` but no `memory`, and the site renders the times with the abort note
   under them. Rerun if you want numbers; commit the abort if you don't get
   them.
+
 - **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-svelte/bench.mjs`
   overrides the scenario's default run counts for a fast, low-accuracy smoke run — see "Quick
   runs" under Scenarios for the other three scenarios that take it.
@@ -901,16 +964,24 @@ It runs in all four tsv scenarios, for two reasons:
 
   So the harness writes each row a shim of its own, `.bin/bench-tsv-npm` and
   `.bin/bench-tsv-wasm`, **derived from the `.bin/tsv` pnpm did write**: that
-  script with its package's three path spellings (the exec lines' relative
-  target, the trailer's absolute one, NODE_PATH's store directories) swapped for
-  this row's. Copying the live script rather than carrying a template is the
-  point — the cost tracks whatever pnpm version installed the other tools, and
-  the WASM shim comes out byte-identical to pnpm's. It lives in `.bin/` because
-  the script addresses its target relative to itself; it is rewritten only when
-  its text would change. The result is validated before use (every `exec` line
-  names this row's script, none names the other package's, the target exists);
-  anything else — no `cmd-shim-target` trailer (npm, yarn), a package missing, a
-  shim whose shape moved — falls back to `node <script>` by path, and the
+  script with its package's path spellings (the exec lines' relative target, the
+  trailer's absolute one, NODE_PATH's store directories) swapped for this row's.
+  Copying the live script rather than carrying a template is the point — the cost
+  tracks whatever pnpm version installed the other tools, and the WASM shim comes
+  out byte-identical to pnpm's. It lives in `.bin/` because the script addresses
+  its target relative to itself; it is rewritten only when its text would change.
+
+  **pnpm spells those paths two ways** — through the hoisted
+  `node_modules/<pkg>` symlink, or through the store path that symlink points at
+  (`node_modules/.pnpm/<pkg>@<version>/node_modules/<pkg>`) — and which one it
+  writes has moved between installs of the same pnpm version. So the derivation
+  matches and validates by what a path **resolves to**, never by how it is
+  spelled, and rewrites both spellings; an exact-string match silently lost the
+  shim (and the ~3 ms with it) the first time pnpm switched. The result is
+  validated before use: every `exec` line must resolve to this row's script, and
+  the text must not still name the other package. Anything else — no
+  `cmd-shim-target` trailer (npm, yarn), a package missing, a shim whose shape
+  moved — falls back to `node <script>` by path, and the
   scenario prints a `- tsv-npm: no pnpm bin shim to copy …` line into its
   output so a published table carries the difference with it.
   `preflight-selftest.mjs` reports the same thing before a run starts.

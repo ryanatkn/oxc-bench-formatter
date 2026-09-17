@@ -5,6 +5,7 @@ import {
   createFormatters,
   describeCorpus,
   printHeader,
+  printTarget,
   runHyperfine,
   runMemoryBenchmarks,
   setupCwd,
@@ -24,7 +25,7 @@ async function main() {
   checkGnuTime();
 
   console.log("");
-  console.log("Target: Storybook repository (mixed with embedded languages)");
+  printTarget("Storybook repository (mixed with embedded languages)");
   console.log(`Corpus: ${describeCorpus(dataDir)}`);
   console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
   console.log("- Git reset before each run");

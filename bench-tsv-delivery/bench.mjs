@@ -33,6 +33,7 @@ import {
   createFormatters,
   describeCorpus,
   printHeader,
+  printTarget,
   setupCwd,
 } from "../shared/utils.mjs";
 
@@ -60,7 +61,7 @@ async function main() {
   execSync(prepareCmd, { stdio: "ignore" });
 
   console.log("");
-  console.log("Target: TypeScript compiler parser.ts (~540KB), through each tsv distribution");
+  printTarget("TypeScript compiler parser.ts (~540KB), through each tsv distribution");
   console.log(`Corpus: ${describeCorpus(dataFile)}`);
   console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
   console.log("- Copy original before each run");

@@ -5,6 +5,7 @@ import {
   createFormatters,
   describeCorpus,
   printHeader,
+  printTarget,
   runHyperfine,
   runMemoryBenchmarks,
   setupCwd,
@@ -24,7 +25,7 @@ async function main() {
   checkGnuTime();
 
   console.log("");
-  console.log("Target: Outline repository (js/ts/tsx only)");
+  printTarget("Outline repository (js/ts/tsx only)");
   console.log(`Corpus: ${describeCorpus(dataDir)}`);
   console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
   console.log("- Git reset before each run");
