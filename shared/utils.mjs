@@ -402,6 +402,24 @@ export function benchRunCounts(warmupDefault, runsDefault) {
   return [...resolvedRunCounts];
 }
 
+/**
+ * Seconds to idle before each command's set of timing runs (hyperfine `--setup`,
+ * which runs once per command, before its warmups) — a thermal settle. hyperfine
+ * runs the commands in the order given with no interleaving, so on a machine that
+ * throttles each later command starts warmer than the one before it; a pause
+ * between commands lets the package cool toward the same starting point every
+ * row gets. Per command rather than per run (`--prepare`) because between-row
+ * drift is the bias the fixed order creates, and a per-run sleep would cost
+ * hundreds of them for within-row noise the mean already averages. Override with
+ * `BENCH_SETTLE_S`; `0` disables it.
+ */
+export const SETTLE_SECONDS = readRunCount("BENCH_SETTLE_S", 10, 0);
+
+/** The `--setup` argument pair for `SETTLE_SECONDS`, or nothing when it is off. */
+export function settleArgs() {
+  return SETTLE_SECONDS > 0 ? ["--setup", `sleep ${SETTLE_SECONDS}`] : [];
+}
+
 function readRunCount(name, fallback, min) {
   const raw = process.env[name];
   if (raw === undefined || raw === "") return fallback;
@@ -434,6 +452,16 @@ export function createFormatters(projectRoot, configDir) {
   // .svelte-only bench-svelte corpus that oxfmt leg spawns on zero files — the
   // startup cost is part of its shipped directory posture, so it stays.
   const rsvelteBin = `${projectRoot}/node_modules/.bin/rsvelte-fmt`;
+  // rsvelte-fmt ships an on-disk cache of formatted `<style>` blocks and an oxfmt
+  // daemon, both serving only its DELEGATED CSS path (`--no-native-css`): on the
+  // default in-process path it writes no cache (verified at 0.7.23 — a run over
+  // the bench-svelte corpus with `RSVELTE_FMT_CACHE_DIR` pointed at an empty dir
+  // leaves it empty, and no `~/.cache/rsvelte-fmt` exists on the machine that
+  // produced results.json) and leaves no daemon behind. Pinned off anyway, so a
+  // release that widened the cache to the native path could not hand this row
+  // warm state tsv's rows have no counterpart to; timed with and without, the
+  // pins move nothing measurable on the native path.
+  const rsvelteEnv = "RSVELTE_FMT_NO_CACHE=1 RSVELTE_FMT_NO_DAEMON=1";
   // @fuzdev/tsv-wasm ships tsv's CLI as a Node script over the WASM engine —
   // one source, shipped verbatim as the bin of that package and as the native
   // @fuzdev/tsv's fallback. Not run as `node_modules/.bin/tsv`, because both
@@ -473,7 +501,7 @@ export function createFormatters(projectRoot, configDir) {
     // Unlike tsv, rsvelte-fmt is configurable; the scenario's oxfmtrc.json pins
     // it to tsv's fixed style (printWidth 100, tabs, single quotes, no trailing
     // commas) so break decisions and output volume are comparable.
-    rsvelte: (files) => `${rsvelteBin} --config ${configDir}/oxfmtrc.json ${files}`,
+    rsvelte: (files) => `${rsvelteEnv} ${rsvelteBin} --config ${configDir}/oxfmtrc.json ${files}`,
 
     // Check-mode counterparts: identical scope and config, no writes. Preflight
     // reads their diagnostics to learn which files each formatter rejects.
@@ -492,7 +520,8 @@ export function createFormatters(projectRoot, configDir) {
 
       "tsv-npm": (files) => `${tsvNpmBin} format --check ${files}`,
 
-      rsvelte: (files) => `${rsvelteBin} --check --config ${configDir}/oxfmtrc.json ${files}`,
+      rsvelte: (files) =>
+        `${rsvelteEnv} ${rsvelteBin} --check --config ${configDir}/oxfmtrc.json ${files}`,
     },
   };
 }
@@ -1089,6 +1118,7 @@ export async function benchRows(rows, { projectRoot, warmup, runs, prepare, base
   await runHyperfine([
     `--warmup=${warmup}`,
     `--runs=${runs}`,
+    ...settleArgs(),
     "--prepare",
     prepare,
     "--shell=bash",

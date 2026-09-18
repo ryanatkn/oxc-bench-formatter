@@ -325,7 +325,22 @@ the order given and doesn't interleave or randomize them, so on a laptop that
 thermally throttles, later formatters run on a warmer machine. In the tsv
 scenarios tsv is the last command, which biases against it rather than for it —
 worth knowing before quoting a ratio to two decimal places, and worth re-checking
-if the order is ever changed.
+if the order is ever changed. The tsv scenarios also pass hyperfine `--setup
+"sleep 10"` (`SETTLE_SECONDS` in `shared/utils.mjs`; `BENCH_SETTLE_S` overrides,
+`0` disables), an idle before each command's warmups so every row starts from a
+cooler, more alike package — it narrows the drift, it doesn't remove the order.
+
+**rsvelte-fmt's cache and daemon are pinned off** (`RSVELTE_FMT_NO_CACHE=1
+RSVELTE_FMT_NO_DAEMON=1`, `createFormatters`). Both serve only its delegated CSS
+path (`--no-native-css`), which the harness never takes: on the default in-process
+path a run writes nothing to `RSVELTE_FMT_CACHE_DIR` and no `~/.cache/rsvelte-fmt`
+has ever appeared on the machine behind `results.json`, so the published rows
+carried no warm state. The pins keep that true across releases.
+
+**`node_startup` in `results.json`** is a bare `node -e ""` timed under hyperfine
+with the scenarios' PATH (`measureNodeStartup` in `bench-all-and-update-readme.mjs`):
+the launch floor every npm-bin row pays. It sits beside `machine` and `versions`,
+never as a row, so a consumer ranging over "every other tool" can't fold it in.
 
 **Concurrency, when reading the numbers:** the harness never caps threads, so
 each formatter runs at its own default — tsv, oxfmt, biome, and rsvelte-fmt

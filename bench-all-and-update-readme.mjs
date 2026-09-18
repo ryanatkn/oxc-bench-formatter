@@ -2,7 +2,7 @@
 
 import { exec, execFile } from "child_process";
 import { constants } from "fs";
-import { access, readdir, readFile, stat, writeFile } from "fs/promises";
+import { access, readdir, readFile, rm, stat, writeFile } from "fs/promises";
 import os from "os";
 import { delimiter, dirname, join } from "path";
 import { fileURLToPath } from "url";
@@ -48,6 +48,34 @@ const { bin: tsvBin, source: tsvSource } = resolveTsv(".");
  * comparisons, not noisy versions of one. Without this line the results are not
  * reproducible or interpretable.
  */
+/**
+ * How long a bare `node -e ""` takes on this machine, in milliseconds — the floor
+ * every npm-bin row pays before its formatter runs (Prettier's, Biome's, Oxfmt's,
+ * rsvelte-fmt's, and tsv's dispatcher row all start Node). Measured once per run
+ * under hyperfine with the same PATH the scenarios resolve `node` from, so it is
+ * a machine property beside `machine` and `versions` rather than a row: a row
+ * would be folded into "every other tool" by consumers ranging over the tables.
+ */
+async function measureNodeStartup() {
+  const exportPath = join(os.tmpdir(), `bench-formatter-node-startup-${process.pid}.json`);
+  const runs = 20;
+  try {
+    await execFileAsync(
+      "hyperfine",
+      ["--warmup=3", `--runs=${runs}`, "--shell=bash", `--export-json=${exportPath}`, 'node -e ""'],
+      { env: binEnv },
+    );
+    const [result] = JSON.parse(await readFile(exportPath, "utf-8")).results;
+    return {
+      mean_ms: result.mean * 1000,
+      stddev_ms: (result.stddev ?? 0) * 1000,
+      runs,
+    };
+  } finally {
+    await rm(exportPath, { force: true });
+  }
+}
+
 function describeMachine() {
   const cpus = os.cpus();
   const model = cpus[0]?.model.replace(/\s+/g, " ").trim() ?? "unknown CPU";
@@ -243,8 +271,9 @@ ${benchmarkResults}
  * `bench-all.mjs` emptied before the run, so these are this run's and nothing
  * else's. They are joined here with the same versions and machine line the
  * README gets, in the order the scenarios ran. tsv.fuz.dev's generator reads
- * this file, so its keys are a consumed interface: `machine`, `versions` keyed
- * by formatter name, and `scenarios` of records.
+ * this file, so its keys are a consumed interface: `machine`, `node_startup`
+ * (see `measureNodeStartup`), `versions` keyed by formatter name, and
+ * `scenarios` of records.
  */
 async function composeResults(versions, runStartedAt) {
   const files = (await readdir(RESULTS_DIR)).filter((file) => file.endsWith(".json"));
@@ -270,6 +299,7 @@ async function composeResults(versions, runStartedAt) {
 
   return {
     machine: describeMachine(),
+    node_startup: await measureNodeStartup(),
     versions: {
       prettier: versions.prettier,
       biome: versions.biome,

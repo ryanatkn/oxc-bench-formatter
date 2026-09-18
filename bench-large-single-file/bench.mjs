@@ -12,6 +12,7 @@ import {
   runHyperfine,
   runMemoryBenchmarks,
   runPreflight,
+  settleArgs,
   setupCwd,
   warnUnshimmedTsvRows,
 } from "../shared/utils.mjs";
@@ -79,6 +80,7 @@ async function main() {
   await runHyperfine([
     `--warmup=${WARMUP_RUNS}`,
     `--runs=${BENCHMARK_RUNS}`,
+    ...settleArgs(),
     "--prepare",
     prepareCmd,
     "--shell=bash",
