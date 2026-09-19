@@ -21,11 +21,11 @@ importers:
         specifier: ^2.5.11
         version: 2.5.13
       '@fuzdev/tsv':
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: ^0.4.1
+        version: 0.4.1
       '@fuzdev/tsv-wasm':
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: ^0.4.1
+        version: 0.4.1
       '@ianvs/prettier-plugin-sort-imports':
         specifier: ^4.7.1
         version: 4.7.1(@prettier/plugin-oxc@0.2.2)(prettier@3.9.6)
@@ -163,52 +163,52 @@ packages:
   '@emnapi/wasi-threads@1.2.2':
     resolution: {integrity: sha512-c95qOXkHdydNKhscBTebqEC1CVAZpyqOfVfBzQ1qgzyl3gfeldUjIggDbIZgDKsHLgnsM+igH7TJ/eAasaVuMA==}
 
-  '@fuzdev/tsv-darwin-arm64@0.4.0':
-    resolution: {integrity: sha512-2K1x1+9/IZ5lMtCsiHRBAJ6r2BD6dGUz5slr8FYtNBpYRdqFy4QtXoE89pRq9GLJ96XJyS31tjC/YrpMNCxwWQ==}
+  '@fuzdev/tsv-darwin-arm64@0.4.1':
+    resolution: {integrity: sha512-96TWaF4yEEdM6kuWK7YpqnSSCSIBqHprkE68d7h1PNKm0MURy+zcQYA/WdB+sn4gemyxud8lPhP8aFusTHVpgA==}
     engines: {node: '>=22'}
     cpu: [arm64]
     os: [darwin]
 
-  '@fuzdev/tsv-darwin-x64@0.4.0':
-    resolution: {integrity: sha512-Y6vG/OdAj8RNpYBOuLeInyl1OLhn7nIG6g1jBQWLCfbMDRgKgkb5pcBjc4dCqlfzv/EXpvc3rSRJYVOc7cTE1A==}
+  '@fuzdev/tsv-darwin-x64@0.4.1':
+    resolution: {integrity: sha512-/GUCgmVVehEU8lOx0nmUFkPmHoaNxc1uQQiW1wmcFXKlMZtiTg2vk0+P4n/WEYSY987MUnOTZOJzQDGl4x9f0g==}
     engines: {node: '>=22'}
     cpu: [x64]
     os: [darwin]
 
-  '@fuzdev/tsv-linux-arm64-gnu@0.4.0':
-    resolution: {integrity: sha512-HvVnMraSt8mHKhjhAmHUFdSvzmAmkMXgWp33ubOnGsntOoKzfUpw0518nkHY0I8aP1+x1+bXVe+5/aB8NfJQZw==}
+  '@fuzdev/tsv-linux-arm64-gnu@0.4.1':
+    resolution: {integrity: sha512-Se/z1sLPU7bbcO0FRw86mPRhdCQz6JiWOmKP2jQylj+mQd2qitKpQ3EvagaPWDPUd9IWAQHX+nEQ5h+wFrahrQ==}
     engines: {node: '>=22'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@fuzdev/tsv-linux-x64-gnu@0.4.0':
-    resolution: {integrity: sha512-x+w/LpaJdXo/b01QAad7Gsho4J5526BEMJxP5r8tuvlYNsBcYNFKDrCZV+NRxZN0QmmgxPJnQI8efa29lcZTUA==}
+  '@fuzdev/tsv-linux-x64-gnu@0.4.1':
+    resolution: {integrity: sha512-s0+HxoL8t7iB1jGfmhd+696LLflHCf2UJ+2QkMpWjZfHn/d3OX02c39vYCfqfOd/rRVY9SyyWlg2cs/yTzHCwg==}
     engines: {node: '>=22'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@fuzdev/tsv-linux-x64-musl@0.4.0':
-    resolution: {integrity: sha512-NT1tDx7w/ZvzDlmL0p+q5V9Ou0PAp9/vH4BjsdE0QCbS81xxVuUHZqNTMo4Z1I7ojfA4yomvFnFwsf5jb27rtw==}
+  '@fuzdev/tsv-linux-x64-musl@0.4.1':
+    resolution: {integrity: sha512-TSqmgybxzYzAdeoSwGqiIJoRgLDIkb0NxepAHuEpcMIyhJJXALH6CyeLm6H9DdPgzOxoGSUqpQm31OpeqGlllQ==}
     engines: {node: '>=22'}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@fuzdev/tsv-wasm@0.4.0':
-    resolution: {integrity: sha512-FxPju91PXkbDRe3kPG6drwuU37PNDlm66+MS2+zpEPklCeSDoLAt7d6lMq9rR87v+8GpppWnaW+jJ5P/UnwhEw==}
+  '@fuzdev/tsv-wasm@0.4.1':
+    resolution: {integrity: sha512-2zBJflaozPi5CYLWenhAtWMyAOQHsSNCtkuFysmyT4L6ApGs9XUo1txm9rHZxD5ffY4QKT3oOZgm9tYG48kI3A==}
     engines: {node: '>=22'}
     hasBin: true
 
-  '@fuzdev/tsv-win32-x64@0.4.0':
-    resolution: {integrity: sha512-aJNRqt8ceOMdyx84nvwPiuEZp+bzXGgTjqBGX6xcg4L9LyGB3fEJNvO92sBqEp96bSv5EGFUMXiaSlYVr/y12A==}
+  '@fuzdev/tsv-win32-x64@0.4.1':
+    resolution: {integrity: sha512-BuSBLzulnxFGKLnNPDuxQwLtRmhQMvIIh6/K0BrL4wHn4B3W5DqgcRh1CGEMyzHpjTwkHYiHsvG2N5DRwzxX7Q==}
     engines: {node: '>=22'}
     cpu: [x64]
     os: [win32]
 
-  '@fuzdev/tsv@0.4.0':
-    resolution: {integrity: sha512-dGh7w6fG0gUdRE36i0RCj1AH7SXe/SFW2G9KQJNxA0fk5onKDiRuc+JpEluI5zuutgUWrrsVN7IHagBJi/VOQA==}
+  '@fuzdev/tsv@0.4.1':
+    resolution: {integrity: sha512-SX66ib7UwQZa88URZmy+OAwpJ4g4xrTBBsISlyvfnHrE5T/R3HUoEZ6CWlmxrKp/CD1haMQqVasziv7TGM+eWQ==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -1710,34 +1710,34 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
-  '@fuzdev/tsv-darwin-arm64@0.4.0':
+  '@fuzdev/tsv-darwin-arm64@0.4.1':
     optional: true
 
-  '@fuzdev/tsv-darwin-x64@0.4.0':
+  '@fuzdev/tsv-darwin-x64@0.4.1':
     optional: true
 
-  '@fuzdev/tsv-linux-arm64-gnu@0.4.0':
+  '@fuzdev/tsv-linux-arm64-gnu@0.4.1':
     optional: true
 
-  '@fuzdev/tsv-linux-x64-gnu@0.4.0':
+  '@fuzdev/tsv-linux-x64-gnu@0.4.1':
     optional: true
 
-  '@fuzdev/tsv-linux-x64-musl@0.4.0':
+  '@fuzdev/tsv-linux-x64-musl@0.4.1':
     optional: true
 
-  '@fuzdev/tsv-wasm@0.4.0': {}
+  '@fuzdev/tsv-wasm@0.4.1': {}
 
-  '@fuzdev/tsv-win32-x64@0.4.0':
+  '@fuzdev/tsv-win32-x64@0.4.1':
     optional: true
 
-  '@fuzdev/tsv@0.4.0':
+  '@fuzdev/tsv@0.4.1':
     optionalDependencies:
-      '@fuzdev/tsv-darwin-arm64': 0.4.0
-      '@fuzdev/tsv-darwin-x64': 0.4.0
-      '@fuzdev/tsv-linux-arm64-gnu': 0.4.0
-      '@fuzdev/tsv-linux-x64-gnu': 0.4.0
-      '@fuzdev/tsv-linux-x64-musl': 0.4.0
-      '@fuzdev/tsv-win32-x64': 0.4.0
+      '@fuzdev/tsv-darwin-arm64': 0.4.1
+      '@fuzdev/tsv-darwin-x64': 0.4.1
+      '@fuzdev/tsv-linux-arm64-gnu': 0.4.1
+      '@fuzdev/tsv-linux-x64-gnu': 0.4.1
+      '@fuzdev/tsv-linux-x64-musl': 0.4.1
+      '@fuzdev/tsv-win32-x64': 0.4.1
 
   '@ianvs/prettier-plugin-sort-imports@4.7.1(@prettier/plugin-oxc@0.2.2)(prettier@3.9.6)':
     dependencies:
