@@ -34,6 +34,7 @@ import {
   describeCorpus,
   printHeader,
   printRunCounts,
+  printCorpus,
   printTarget,
   setupCwd,
 } from "../shared/utils.mjs";
@@ -63,7 +64,7 @@ async function main() {
 
   console.log("");
   printTarget("TypeScript compiler parser.ts (~540KB), through each tsv distribution");
-  console.log(`Corpus: ${describeCorpus(dataFile)}`);
+  printCorpus(describeCorpus(dataFile));
   printRunCounts();
   console.log("- Copy original before each run");
   console.log("");

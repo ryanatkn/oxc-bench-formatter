@@ -58,6 +58,7 @@ function beginRecord(title) {
     name,
     started_at: Date.now(),
     target: "",
+    corpus: "",
     // Seeded from `benchRunCounts` rather than left for hyperfine's argv to fill:
     // preflight aborts a scenario without ever reaching hyperfine, and for
     // `bench-svelte` that is the *common* outcome, so the record it publishes most
@@ -109,7 +110,7 @@ export function clearResults() {
 // Records carry more digits than the console prints, not all of them: a
 // microsecond and a kilobyte are below anything these runs resolve, and rounding
 // there keeps a regenerated `results.json` diff to the digits that moved.
-const round = (value, digits) => Number(value.toFixed(digits));
+export const round = (value, digits) => Number(value.toFixed(digits));
 
 /**
  * A ratio of two measured means with its uncertainty, both operands' relative
@@ -560,7 +561,7 @@ export function createFormatters(projectRoot, configDir) {
 }
 
 /**
- * Where a corpus came from, printed with each scenario's target.
+ * Where a corpus came from, printed and recorded with each scenario's target.
  *
  * The cloned corpora track their upstream default branches, so the same scenario
  * run months apart can be a different repository — a difference that otherwise
@@ -1181,6 +1182,19 @@ export function printHeader(title) {
 export function printTarget(target) {
   if (record) record.target = target;
   console.log(`Target: ${target}`);
+}
+
+/**
+ * Print the scenario's corpus provenance, and record it.
+ *
+ * Takes the text rather than the path, since `bench-svelte` composes its pin with
+ * the snapshot's own commit. Recorded for the same reason it is printed: without
+ * it a consumer of `results.json` can say what was measured but not which
+ * revision of the corpus it was measured on, and the cloned corpora move.
+ */
+export function printCorpus(corpus) {
+  if (record) record.corpus = corpus;
+  console.log(`Corpus: ${corpus}`);
 }
 
 // ---

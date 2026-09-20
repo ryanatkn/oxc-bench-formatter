@@ -8,7 +8,7 @@ import { delimiter, dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
 
-import { assertBenchReady, RESULTS_DIR, resolveTsv } from "./shared/utils.mjs";
+import { assertBenchReady, RESULTS_DIR, resolveTsv, round } from "./shared/utils.mjs";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -66,9 +66,11 @@ async function measureNodeStartup() {
       { env: binEnv },
     );
     const [result] = JSON.parse(await readFile(exportPath, "utf-8")).results;
+    // rounded like every other duration in the record, so the file carries one
+    // precision rather than one value at hyperfine's full float width
     return {
-      mean_ms: result.mean * 1000,
-      stddev_ms: (result.stddev ?? 0) * 1000,
+      mean_ms: round(result.mean * 1000, 3),
+      stddev_ms: round((result.stddev ?? 0) * 1000, 3),
       runs,
     };
   } finally {

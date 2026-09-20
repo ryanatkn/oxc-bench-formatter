@@ -5,6 +5,7 @@ import {
   createFormatters,
   describeCorpus,
   printHeader,
+  printCorpus,
   printTarget,
   runHyperfine,
   runMemoryBenchmarks,
@@ -26,7 +27,7 @@ async function main() {
 
   console.log("");
   printTarget("Continue repository (full features)");
-  console.log(`Corpus: ${describeCorpus(dataDir)}`);
+  printCorpus(describeCorpus(dataDir));
   console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
   console.log("- Git reset before each run");
   console.log("");

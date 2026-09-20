@@ -11,6 +11,7 @@ import {
   describeCorpus,
   printHeader,
   printRunCounts,
+  printCorpus,
   printTarget,
   setupCwd,
 } from "../shared/utils.mjs";
@@ -43,7 +44,7 @@ async function main() {
   assertScopeConfigsAgree(".");
 
   printTarget("Outline repository (non-JSX JS/TS subset)");
-  console.log(`Corpus: ${describeCorpus(dataDir)}`);
+  printCorpus(describeCorpus(dataDir));
   printRunCounts();
   console.log("- Git reset before each run");
   console.log("- .ts/.js/.mjs only: the common file set every formatter (incl. tsv) supports");

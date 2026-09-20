@@ -63,7 +63,7 @@ is upstream's, untouched.
 - **`bench-full-features`** (upstream's): oxfmt's `printWidth` raised to 100 to
   match the prettier width upstream already set there — it was comparing 100
   against 80.
-- **Every scenario** prints a `Corpus:` provenance line, and memory rows carry a
+- **Every scenario** prints and records a `Corpus:` provenance line, and memory rows carry a
   ratio to a fixed per-scenario baseline (tsv where it runs, oxfmt in upstream's
   three) rather than to whichever tool used least memory that run.
 - **`shared/utils.mjs`** carries the fork-owned preflight, scope, and provenance
@@ -71,8 +71,9 @@ is upstream's, untouched.
 - **Results are also published as data**: `shared/utils.mjs` records each
   scenario as it prints it, and `update-readme` composes the records into
   `results.json` beside the README, along with the machine, the versions, and the
-  Node launch floor (`node_startup`). The one line every scenario changed for it,
-  upstream's three included, is its `Target:` line, now `printTarget(…)`.
+  Node launch floor (`node_startup`). The two lines every scenario changed for it,
+  upstream's three included, are its `Target:` and `Corpus:` lines, now
+  `printTarget(…)` / `printCorpus(…)`.
 - **Setup is never auto-run**: upstream's `bench-all.mjs` shells out to
   `./init.sh` when a corpus is missing; here it stops with `assertBenchReady`, so
   the one networked step stays outside the benchmark (see Running). `package.json`
@@ -179,6 +180,9 @@ all, since all of its rows are tsv and tsv is non-configurable.
 - **`resolveTsvNodeBin(projectRoot, row)`** / **`warnUnshimmedTsvRows`** — the
   pnpm-shaped bin shims for the tsv-npm and tsv-wasm rows, and the line a
   scenario prints when one couldn't be derived. See "The tsv-npm row".
+- **`printCorpus(describeCorpus(path))`** — the `Corpus:` line and the call that
+  records it. Takes the text, not the path, because `bench-svelte` composes its
+  corpora pin with the snapshot's own commit.
 - **`printHeader`** — display helper. (`FORMATTER_NAMES` beside it is upstream's
   and unused by anything, here or upstream; left in place rather than deleted for
   the merge surface.)
@@ -536,7 +540,8 @@ writes beside the README from the same run: `machine`, `node_startup`, `versions
 keyed by formatter name plus the `node` the Node-launched rows ran on, and one
 record per scenario in run order — `id` (the slug of the
 banner title, which that site keys its per-scenario copy on), `name`, `target`,
-`warmup_runs` / `benchmark_runs`, `settle_seconds` in the scenarios that settle,
+`corpus` (the provenance line — which revision of the corpus these numbers came
+from), `warmup_runs` / `benchmark_runs`, `settle_seconds` in the scenarios that settle,
 the `preflight` rows, `timings` in
 milliseconds from hyperfine's own `--export-json`, `fastest` and `speedups`
 (hyperfine's `Summary`, recomputed from the same means since it isn't exported),
@@ -544,8 +549,8 @@ the `memory` rows in megabytes (their ratios against the scenario's fixed memory
 baseline, which is the one row carrying none — not necessarily `fastest`), and
 `aborted` / `unshimmed` when they apply.
 The records are made by the functions that print the same facts
-(`printHeader`, `printTarget`, `printRunCounts`, `runPreflight`, `runHyperfine`,
-`runMemoryBenchmarks`, `warnUnshimmedTsvRows`) and written on process exit, so
+(`printHeader`, `printTarget`, `printCorpus`, `printRunCounts`, `runPreflight`,
+`runHyperfine`, `runMemoryBenchmarks`, `warnUnshimmedTsvRows`) and written on process exit, so
 an aborted scenario is recorded too — preflight rows and its `aborted` reason,
 no timings. That site validates the file against a strict schema: renaming,
 adding or dropping a key fails its `gro gen` with the path that failed (a
@@ -560,8 +565,9 @@ record, never `results.json`.
 
 - **New scenario**: create `bench-<name>/` (copy an existing one), add the dir
   name to the `scenarios` array in `bench-all.mjs`, and add any corpus fetch to
-  `init.sh`. Print its banner with `printHeader` and its corpus label with
-  `printTarget` — those start and fill the scenario's record in `results.json`.
+  `init.sh`. Print its banner with `printHeader`, its corpus label with
+  `printTarget`, and its provenance with `printCorpus(describeCorpus(…))` — those
+  start and fill the scenario's record in `results.json`.
 - **New formatter**: add a command builder to `createFormatters` in
   `shared/utils.mjs`, then add a `-n=<name>` arg + command to each scenario's
   `runHyperfine([...])` call and a matching entry in its `runMemoryBenchmarks`
@@ -734,10 +740,10 @@ Candidates:
   commit and `collections/` tree id pinned in `corpora-pin.mjs`, so that corpus
   reproduces from one SHA, its snapshot commit is deterministic over the bytes,
   and `bench.mjs` refuses a `data/` built at any other pin (see the rsvelte-fmt
-  section). Until the rest are pinned, each scenario at least prints a
-  `Corpus:` line (`describeCorpus`) naming the commit and date it ran against — or,
-  for the single downloaded file, its size and content hash — so two runs can be
-  told apart instead of silently differing.
+  section). Until the rest are pinned, each scenario at least prints and records a
+  `Corpus:` line (`describeCorpus`, via `printCorpus`) naming the commit and date it
+  ran against — or, for the single downloaded file, its size and content hash — so
+  two runs can be told apart instead of silently differing.
 
 When adding these, keep the apples-to-apples discipline: scope _every_ formatter
 in a tsv-inclusive run to the same file set (the three-way `prettierignore` /
