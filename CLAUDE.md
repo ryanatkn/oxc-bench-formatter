@@ -56,7 +56,8 @@ is upstream's, untouched.
 - **Three scenarios added**: `bench-ts-only`, `bench-svelte`,
   `bench-tsv-delivery` — plus their entries in `bench-all.mjs` and `init.sh`.
 - **`bench-large-single-file`** (upstream's) gained a tsv row and a tsv-npm row,
-  a preflight pass, tsv's style profile on the other four formatters, and lost
+  a preflight pass, tsv's style profile on the other four formatters, the settle
+  between commands the other tsv scenarios take, and lost
   `--ignore-failure`
   because preflight makes it redundant.
 - **`bench-full-features`** (upstream's): oxfmt's `printWidth` raised to 100 to
@@ -69,7 +70,8 @@ is upstream's, untouched.
   machinery; `preflight-selftest.mjs` (run first by `bench-all.mjs`) guards it.
 - **Results are also published as data**: `shared/utils.mjs` records each
   scenario as it prints it, and `update-readme` composes the records into
-  `results.json` beside the README. The one line every scenario changed for it,
+  `results.json` beside the README, along with the machine, the versions, and the
+  Node launch floor (`node_startup`). The one line every scenario changed for it,
   upstream's three included, is its `Target:` line, now `printTarget(…)`.
 - **Setup is never auto-run**: upstream's `bench-all.mjs` shells out to
   `./init.sh` when a corpus is missing; here it stops with `assertBenchReady`, so
@@ -177,7 +179,14 @@ all, since all of its rows are tsv and tsv is non-configurable.
 - **`resolveTsvNodeBin(projectRoot, row)`** / **`warnUnshimmedTsvRows`** — the
   pnpm-shaped bin shims for the tsv-npm and tsv-wasm rows, and the line a
   scenario prints when one couldn't be derived. See "The tsv-npm row".
-- **`printHeader`**, **`FORMATTER_NAMES`** — display helpers.
+- **`printHeader`** — display helper. (`FORMATTER_NAMES` beside it is upstream's
+  and unused by anything, here or upstream; left in place rather than deleted for
+  the merge surface.)
+- **`printRunCounts()`** — the tsv scenarios' run-counts line, with the settle
+  (`SETTLE_SECONDS`) when it is on, and the call that records all three. It takes
+  no arguments: the counts come from `benchRunCounts`, so the printed line can't
+  disagree with the record. Upstream's three print their own line and settle on
+  nothing.
 - **`setupCwd(import.meta.url)`** — each `bench.mjs` chdirs into its own dir so
   relative config/data paths resolve.
 - **`assertBenchReady(projectRoot)`** / **`missingBenchSetup`** — the gate
@@ -210,10 +219,13 @@ all, since all of its rows are tsv and tsv is non-configurable.
 `bench-ts-only`, `bench-svelte`, `bench-tsv-delivery`) take
 `BENCH_WARMUP` / `BENCH_RUNS` overrides via
 `benchRunCounts`, so a change to the harness can be smoke-tested in seconds
-rather than minutes: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-ts-only/bench.mjs`.
+rather than minutes: `BENCH_WARMUP=0 BENCH_RUNS=1 BENCH_SETTLE_S=0 node
+./bench-ts-only/bench.mjs`. Drop the settle along with the counts — it costs 10s
+per command whatever the run count is, which on its own outlasts a smoke run.
 Numbers from an override are not publishable, and don't pretend to be — every
-scenario prints the counts it resolved in its header, so an override is visible
-in a scraped README. The three tsv-free scenarios are upstream's files and keep
+settling scenario prints the counts and settle it resolved in its header and
+records them, so an override is visible in a scraped README and in
+`results.json`. The three tsv-free scenarios are upstream's files and keep
 upstream's hard-coded constants, to hold the merge surface down.
 
 The two embedded/full-features scenarios deliberately drop plain-prettier and
@@ -329,6 +341,11 @@ if the order is ever changed. The tsv scenarios also pass hyperfine `--setup
 "sleep 10"` (`SETTLE_SECONDS` in `shared/utils.mjs`; `BENCH_SETTLE_S` overrides,
 `0` disables), an idle before each command's warmups so every row starts from a
 cooler, more alike package — it narrows the drift, it doesn't remove the order.
+It rides on the run-counts line and into the record (`printRunCounts`,
+`settle_seconds`) for the same reason the counts do: a knob that moves the
+numbers has to leave a mark on what the run publishes, or two runs taken at
+different settings read alike. Upstream's three scenarios don't settle and
+record no such key.
 
 **rsvelte-fmt's cache and daemon are pinned off** (`RSVELTE_FMT_NO_CACHE=1
 RSVELTE_FMT_NO_DAEMON=1`, `createFormatters`). Both serve only its delegated CSS
@@ -341,6 +358,10 @@ carried no warm state. The pins keep that true across releases.
 with the scenarios' PATH (`measureNodeStartup` in `bench-all-and-update-readme.mjs`):
 the launch floor every npm-bin row pays. It sits beside `machine` and `versions`,
 never as a row, so a consumer ranging over "every other tool" can't fold it in.
+The Node that produced it is named in `versions` alongside the formatters —
+asked of the `node` on the scenarios' PATH, the one `measureNodeStartup` times
+and every npm-bin row starts — since a version change moves the floor and the
+five Node-launched rows above it without any formatter having changed.
 
 **Concurrency, when reading the numbers:** the harness never caps threads, so
 each formatter runs at its own default — tsv, oxfmt, biome, and rsvelte-fmt
@@ -511,17 +532,19 @@ shape: union this fork's added dep with upstream's bump.
 **`results.json` is a consumed interface; the README block is for readers.**
 [tsv.fuz.dev](https://tsv.fuz.dev/docs/benchmarks) renders these numbers on its
 benchmarks page, and its generator reads `results.json`, which `update-readme`
-writes beside the README from the same run: `machine`, `versions` keyed by
-formatter name, and one record per scenario in run order — `id` (the slug of the
+writes beside the README from the same run: `machine`, `node_startup`, `versions`
+keyed by formatter name plus the `node` the Node-launched rows ran on, and one
+record per scenario in run order — `id` (the slug of the
 banner title, which that site keys its per-scenario copy on), `name`, `target`,
-`warmup_runs` / `benchmark_runs`, the `preflight` rows, `timings` in
+`warmup_runs` / `benchmark_runs`, `settle_seconds` in the scenarios that settle,
+the `preflight` rows, `timings` in
 milliseconds from hyperfine's own `--export-json`, `fastest` and `speedups`
 (hyperfine's `Summary`, recomputed from the same means since it isn't exported),
 the `memory` rows in megabytes (their ratios against the scenario's fixed memory
 baseline, which is the one row carrying none — not necessarily `fastest`), and
 `aborted` / `unshimmed` when they apply.
 The records are made by the functions that print the same facts
-(`printHeader`, `printTarget`, `runPreflight`, `runHyperfine`,
+(`printHeader`, `printTarget`, `printRunCounts`, `runPreflight`, `runHyperfine`,
 `runMemoryBenchmarks`, `warnUnshimmedTsvRows`) and written on process exit, so
 an aborted scenario is recorded too — preflight rows and its `aborted` reason,
 no timings. That site validates the file against a strict schema: renaming,
@@ -853,7 +876,7 @@ formatters, on `.svelte` files only.
   under them. Rerun if you want numbers; commit the abort if you don't get
   them.
 
-- **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-svelte/bench.mjs`
+- **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 BENCH_SETTLE_S=0 node ./bench-svelte/bench.mjs`
   overrides the scenario's default run counts for a fast, low-accuracy smoke run — see "Quick
   runs" under Scenarios for the other three scenarios that take it.
 - **Version**: `vp exec rsvelte-fmt --version` in
@@ -908,7 +931,7 @@ without a prebuilt native binary falls back to. It runs in one scenario,
   README's `## Versions` list. The mirror image of the native binary's situation:
   the WASM CLI has no `--version` flag but does have an npm manifest, where the
   native binary has the flag and no manifest.
-- **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 node ./bench-tsv-delivery/bench.mjs`,
+- **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 BENCH_SETTLE_S=0 node ./bench-tsv-delivery/bench.mjs`,
   as in the other three tsv scenarios.
 
 ## The tsv-npm row
@@ -1001,8 +1024,10 @@ It runs in all four tsv scenarios, for two reasons:
   output so a published table carries the difference with it.
   `preflight-selftest.mjs` reports the same thing before a run starts.
 
-  Measured with the shim, tsv-npm on `parser.ts` is ~50 ms where by path it was
-  ~45 (hyperfine's own `bash` plus the shim's `sh` and its subprocesses).
+  Measured with the shim, tsv-npm on `parser.ts` is ~48 ms where by path it is
+  ~45 (hyperfine's own `bash` plus the shim's `sh` and its subprocesses) — the
+  same ~3 ms the biome comparison above shows. Read the gap, not the absolute:
+  the row's own figure moves with every tsv release.
 
   Alternatives considered: moving `@fuzdev/tsv-wasm` into its own workspace
   member so both packages get real pnpm shims (clean, but a new workspace

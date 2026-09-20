@@ -72,4 +72,10 @@ jobs:
       # start, so a failed fetch fails here rather than in the bench step.
       - run: ./init.sh
 
+      # No thermal settle here: this run is a smoke test whose numbers are never
+      # published, and the settle would spend ~10s per command — some three
+      # minutes across the four tsv scenarios — buying a fairness nobody reads.
+      # `update-readme.yml` publishes, so it keeps the default.
       - run: vp run bench
+        env:
+          BENCH_SETTLE_S: 0

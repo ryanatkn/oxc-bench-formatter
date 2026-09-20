@@ -10,6 +10,7 @@ import {
   createFormatters,
   describeCorpus,
   printHeader,
+  printRunCounts,
   printTarget,
   setupCwd,
 } from "../shared/utils.mjs";
@@ -76,7 +77,7 @@ async function main() {
   // The pin names the bytes; the snapshot commit is deterministic over them
   // (see setup-corpus.mjs), so its hash is comparable between machines too.
   console.log(`Corpus: ${describePin()}, snapshot ${describeCorpus(dataDir)}`);
-  console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
+  printRunCounts();
   console.log("- Git reset before each run");
   console.log("- .svelte only: the two Svelte-native formatters head-to-head");
   console.log("");

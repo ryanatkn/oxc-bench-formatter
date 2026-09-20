@@ -8,6 +8,7 @@ import {
   createFormatters,
   describeCorpus,
   printHeader,
+  printRunCounts,
   printTarget,
   runHyperfine,
   runMemoryBenchmarks,
@@ -41,7 +42,7 @@ async function main() {
   console.log("");
   printTarget("TypeScript compiler parser.ts (~540KB)");
   console.log(`Corpus: ${describeCorpus(dataFile)}`);
-  console.log(`- ${WARMUP_RUNS} warmup runs, ${BENCHMARK_RUNS} benchmark runs`);
+  printRunCounts();
   console.log("- Copy original before each run");
   warnUnshimmedTsvRows(projectRoot, ["tsv-npm"]);
   console.log("");

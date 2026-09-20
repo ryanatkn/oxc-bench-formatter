@@ -65,6 +65,9 @@ function beginRecord(title) {
     // three scenarios until hyperfine finishes; they hard-code their counts.
     warmup_runs: resolvedRunCounts?.[0] ?? 0,
     benchmark_runs: resolvedRunCounts?.[1] ?? 0,
+    // filled by `printRunCounts`, so it is present exactly in the scenarios that
+    // settle and absent from upstream's three, which don't
+    settle_seconds: undefined,
     preflight: [],
     aborted: undefined,
     unshimmed: [],
@@ -413,11 +416,41 @@ export function benchRunCounts(warmupDefault, runsDefault) {
  * hundreds of them for within-row noise the mean already averages. Override with
  * `BENCH_SETTLE_S`; `0` disables it.
  */
-export const SETTLE_SECONDS = readRunCount("BENCH_SETTLE_S", 10, 0);
+const SETTLE_SECONDS = readRunCount("BENCH_SETTLE_S", 10, 0);
 
 /** The `--setup` argument pair for `SETTLE_SECONDS`, or nothing when it is off. */
 export function settleArgs() {
   return SETTLE_SECONDS > 0 ? ["--setup", `sleep ${SETTLE_SECONDS}`] : [];
+}
+
+/**
+ * Print a settling scenario's run counts and settle, and record all three.
+ *
+ * Every knob a run can be started with has to leave a mark on what that run
+ * publishes, or two runs taken at different settings read alike — the reason the
+ * counts are printed rather than assumed from the defaults. The settle is the
+ * same kind of knob (`BENCH_SETTLE_S`, `0` disables) and moves the numbers the
+ * same way, so it rides on the same line and into the same record.
+ *
+ * The counts come from `benchRunCounts` rather than the caller, so the line and
+ * the record can't disagree: a scenario passing its own numbers could print the
+ * defaults over an override the record already has.
+ *
+ * The settle is recorded here rather than in `settleArgs`, which a scenario
+ * preflight aborts never reaches: it describes how that run's numbers were to be
+ * taken, as the seeded counts do.
+ */
+export function printRunCounts() {
+  if (resolvedRunCounts === null) {
+    // upstream's three scenarios hard-code their counts and call neither this nor
+    // `benchRunCounts`; a settling scenario that skipped it would print counts
+    // nothing resolved
+    throw new Error("printRunCounts() before benchRunCounts() resolved the counts");
+  }
+  const [warmup, runs] = resolvedRunCounts;
+  if (record) record.settle_seconds = SETTLE_SECONDS;
+  const settle = SETTLE_SECONDS > 0 ? `, ${SETTLE_SECONDS}s settle before each formatter` : "";
+  console.log(`- ${warmup} warmup runs, ${runs} benchmark runs${settle}`);
 }
 
 function readRunCount(name, fallback, min) {

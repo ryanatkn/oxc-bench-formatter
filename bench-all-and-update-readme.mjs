@@ -202,6 +202,19 @@ async function getVersions() {
       // not installed — the tsv-wasm row is missing from the results anyway
     }
 
+    // Asked of the `node` on the scenarios' PATH, not `process.version`: that is
+    // the one every npm-bin row starts and the one `measureNodeStartup` times,
+    // and a report that publishes the launch floor has to name what produced it.
+    // Five of the rows here are a Node process, so a version change moves them
+    // without any formatter having changed.
+    let node = "unknown";
+    try {
+      const { stdout } = await execFileAsync("node", ["--version"], { env: binEnv });
+      node = stdout.trim().replace(/^v/, "");
+    } catch {
+      // nothing to name; the rows that pay it are in the results either way
+    }
+
     return {
       prettier: prettier.stdout.trim(),
       biome: biome.stdout.trim().replace("Version: ", ""),
@@ -209,6 +222,7 @@ async function getVersions() {
       rsvelte: rsvelte.stdout.trim().replace("rsvelte_fmt ", ""),
       tsv,
       tsvWasm,
+      node,
     };
   } catch (error) {
     console.error("Error fetching versions:", error);
@@ -244,11 +258,15 @@ ${benchmarkResults}
 
   readmeContent = beforeMarker + "\n\n" + newBenchmarkContent + "\n\n" + afterMarker;
 
-  // Update versions section. The trailing machine line is optional in the match
-  // so this still works against a README written before it existed.
+  // Update versions section. The trailing lines a README may predate — tsv-wasm,
+  // Node, the machine — are optional in the match, so this still works against
+  // one written before each existed.
   const versionsRegex =
-    /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*rsvelte-fmt\*\*: .*\n- \*\*tsv\*\*: .*(\n- \*\*tsv-wasm\*\*: .*)?(\n\n_Measured on: .*_)?/;
-  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **rsvelte-fmt**: ${versions.rsvelte}\n- **tsv**: ${versions.tsv}\n- **tsv-wasm**: ${versions.tsvWasm}\n\n_Measured on: ${describeMachine()} — the ratios below depend on the core count._`;
+    /## Versions\n\n- \*\*Prettier\*\*: .*\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*rsvelte-fmt\*\*: .*\n- \*\*tsv\*\*: .*(\n- \*\*tsv-wasm\*\*: .*)?(\n- \*\*Node\*\*: .*)?(\n\n_Measured on: .*_)?/;
+  // Node is listed with the formatters because five of the rows are a Node
+  // process: both prettiers, tsv-npm, tsv-wasm, and the launchers biome and
+  // rsvelte-fmt start with.
+  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **rsvelte-fmt**: ${versions.rsvelte}\n- **tsv**: ${versions.tsv}\n- **tsv-wasm**: ${versions.tsvWasm}\n- **Node**: ${versions.node}\n\n_Measured on: ${describeMachine()} — the ratios below depend on the core count._`;
 
   if (!versionsRegex.test(readmeContent)) {
     // Fail rather than warn: writing fresh numbers under a stale version list is
@@ -272,8 +290,8 @@ ${benchmarkResults}
  * else's. They are joined here with the same versions and machine line the
  * README gets, in the order the scenarios ran. tsv.fuz.dev's generator reads
  * this file, so its keys are a consumed interface: `machine`, `node_startup`
- * (see `measureNodeStartup`), `versions` keyed by formatter name, and
- * `scenarios` of records.
+ * (see `measureNodeStartup`), `versions` keyed by formatter name plus the `node`
+ * the Node-launched rows ran on, and `scenarios` of records.
  */
 async function composeResults(versions, runStartedAt) {
   const files = (await readdir(RESULTS_DIR)).filter((file) => file.endsWith(".json"));
@@ -307,6 +325,7 @@ async function composeResults(versions, runStartedAt) {
       "rsvelte-fmt": versions.rsvelte,
       tsv: versions.tsv,
       "tsv-wasm": versions.tsvWasm,
+      node: versions.node,
     },
     scenarios,
   };
