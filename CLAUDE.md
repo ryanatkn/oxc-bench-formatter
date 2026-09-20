@@ -374,7 +374,7 @@ comparison could not cover every formatter — and pinning would stop measuring 
 this suite is for. Consequence to keep in mind: a ratio between a parallel tool and
 a serial one **scales with core count**, so a ratio is only meaningful alongside
 the machine (`update-readme` records it under `## Versions`; see the README's
-"How to read these numbers").
+"Reading the numbers").
 
 Separating engine from thread count: comparing hyperfine's `[User: …]` times
 instead of wall times is the parallelism-neutral view — on `bench-ts-only` the

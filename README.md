@@ -4,14 +4,12 @@ This is a fork of [oxc-project/bench-formatter](https://github.com/oxc-project/b
 with [tsv](https://github.com/fuzdev/tsv) added.
 Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfmt** with **tsv** and **rsvelte-fmt**.
 
-> **About this fork.** It adds three formatters, three scenarios, and a set of guards against silently unfair comparisons. Upstream's own scenarios are left as they were except where tsv competes in them, plus one lopsided width setting; the deviations are listed in [CLAUDE.md](CLAUDE.md).
+> **About this fork.** It adds [tsv](https://tsv.fuz.dev) — a native-Rust formatter for the JS/TS family, CSS, and Svelte — plus three scenarios and a set of guards against silently unfair comparisons. Changes to upstream's own scenarios are small; [CLAUDE.md](CLAUDE.md) lists every deviation and the full methodology.
 >
-> - **[tsv](https://tsv.fuz.dev)** is a native-Rust formatter for the JS/TS family, CSS, and Svelte. It's installed from npm like every other formatter here (`@fuzdev/tsv`'s platform package carries the binary); `TSV_BIN` benches a local build instead.
-> - **It has no JSX/TSX parser**, so it runs only where the corpus is JSX-free: `bench-large-single-file` (`parser.ts`) and the fork-added `bench-ts-only`, which benches Outline's non-JSX subset (`.ts`/`.js`/`.mjs`) with every formatter scoped to that same set.
-> - **tsv has two rows wherever it faces another formatter.** `tsv` is the bare native binary; `tsv-npm` is that same binary through `@fuzdev/tsv`'s Node dispatcher, how `npx tsv` runs it. Prettier, Biome, Oxfmt and rsvelte-fmt are all timed through their npm bins, which start Node first (Biome's and rsvelte-fmt's then launch a native binary, as tsv's dispatcher does), so `tsv-npm` is the like-for-like row against them and `tsv` is what the binary costs on its own. Ratios are still taken against `tsv`.
-> - **`bench-svelte`** (also fork-added) puts tsv head-to-head with [rsvelte-fmt](https://github.com/baseballyama/rsvelte) (`@rsvelte/fmt`) on ~2,230 third-party `.svelte` files, with rsvelte-fmt configured to tsv's fixed style, as every formatter in a tsv scenario is. rsvelte-fmt 0.7.x crashes nondeterministically (SIGABRT) on the check pass this scenario's preflight runs, so about two runs in three abort before timing anything — and an aborted run is published as-is, abort line included, rather than retried into a clean-looking result.
-> - **`bench-tsv-delivery`** (also fork-added) answers a different question — what each way of _installing_ tsv costs. It benches the native binary against the same binary reached through [`@fuzdev/tsv`](https://www.npmjs.com/package/@fuzdev/tsv)'s Node dispatcher (how `npx tsv` runs it), and against [`@fuzdev/tsv-wasm`](https://www.npmjs.com/package/@fuzdev/tsv-wasm), the same CLI over a WASM engine in Node that platforms without a prebuilt binary fall back to. No other formatter appears in it, so its ratios only ever compare tsv to tsv.
-> - **Reading the numbers:** they measure the whole CLI — process spawn, I/O, and each tool's own multi-file parallelism — not the engine, so the ratios move with the core count of the machine named under [Versions](#versions). Full methodology in [CLAUDE.md](CLAUDE.md).
+> - **tsv has no JSX/TSX parser**, so it runs only on JSX-free corpora: `bench-large-single-file` (`parser.ts`) and the fork-added `bench-ts-only` (Outline's `.ts`/`.js`/`.mjs` files, every formatter scoped to that same set) and `bench-svelte`.
+> - **`bench-svelte`** puts tsv against [rsvelte-fmt](https://github.com/baseballyama/rsvelte) (`@rsvelte/fmt`) on 2,226 third-party `.svelte` files. rsvelte-fmt 0.7.x crashes nondeterministically (SIGABRT) on the check pass this scenario's preflight runs, so about two runs in three abort before timing anything — and an aborted run is published as-is, abort line included, rather than retried into a clean-looking result.
+> - **`bench-tsv-delivery`** asks a different question — what each way of _installing_ tsv costs — so only tsv's own rows appear in it.
+> - **Reading the numbers:** they measure the whole CLI — process spawn, I/O, and each tool's own multi-file parallelism — not the engine, so the ratios move with the core count of the machine named under [Versions](#versions).
 
 ## Formatters
 
@@ -20,20 +18,34 @@ Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfm
 - [Biome](https://biomejs.dev/) Formatter
 - [Oxfmt](https://oxc.rs)
 - [rsvelte-fmt](https://github.com/baseballyama/rsvelte) (`@rsvelte/fmt`, Svelte scenario only)
-- [tsv](https://tsv.fuz.dev/)
-- [tsv](https://tsv.fuz.dev/) through its npm dispatcher (`@fuzdev/tsv`'s `tsv` bin — beside native tsv in every scenario tsv runs in)
-- [tsv](https://tsv.fuz.dev/) as WASM (`@fuzdev/tsv-wasm`, delivery scenario only)
+- [tsv](https://tsv.fuz.dev/), as up to three rows — one per way of running it:
+
+| Row        | What is timed                                                                                                                                                   | Scenarios                 |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `tsv`      | the native binary, run directly                                                                                                                                 | every tsv scenario        |
+| `tsv-npm`  | the same binary, started the way an npm install starts it (`npx tsv`, a `package.json` script): `@fuzdev/tsv`'s `tsv` bin, a Node script that spawns the binary | every tsv scenario        |
+| `tsv-wasm` | the same CLI over a WASM engine in Node (`@fuzdev/tsv-wasm`) — the fallback on platforms with no prebuilt binary                                                | `bench-tsv-delivery` only |
+
+`tsv` and `tsv-npm` do identical formatting work in the same binary. The only
+difference is the Node start and process spawn in front of `tsv-npm`: a fixed
+~30 ms in the results below, whatever the corpus — most of a single-file run, a
+shrinking share of a multi-file one.
+
+**Read `tsv-npm` against the other formatters.** They are all timed through
+their npm bins, which start Node first too (Biome's and rsvelte-fmt's then spawn
+a native binary, exactly `tsv-npm`'s shape), so it is the like-for-like row.
+`tsv` is the engine's own cost, and the fixed baseline the memory ratios are
+taken against. `tsv-npm`'s memory row is its Node launcher (~50 MB), not tsv —
+see the memory note under [Benchmark Details](#benchmark-details).
 
 ## Run
 
 ```bash
-# One-time setup: dependencies and the test corpora.
-# This is the only step that needs the network — the benchmarks themselves
-# read nothing but local files, so the machine can be offline for them.
+# One-time setup (dependencies + test corpora) — the only step that uses the network
 pnpm run setup   # ./init.sh
 
 # Run all benchmarks
-pnpm run bench   # or, offline: node bench-all.mjs (see "Running disconnected")
+pnpm run bench
 
 # Or one scenario at a time
 node ./bench-large-single-file/bench.mjs
@@ -45,19 +57,16 @@ node ./bench-svelte/bench.mjs
 node ./bench-tsv-delivery/bench.mjs
 ```
 
-Running disconnected: the benchmarks themselves need no network, but `pnpm run`
-does if your globally installed pnpm doesn't match the `packageManager` pin in
-`package.json` — pnpm fetches the pinned version on every invocation in this
-repo, which offline stalls for a minute before the script starts. Either match
-that version or call the scripts directly (`node bench-all.mjs`,
-`node bench-all-and-update-readme.mjs`).
+Offline, run `node bench-all.mjs` (or `node bench-all-and-update-readme.mjs`)
+instead of `pnpm run …`: when the installed pnpm doesn't match the
+`packageManager` pin, pnpm tries to fetch the pinned version on every invocation
+and stalls for a minute before the script starts.
 
 `pnpm run update-readme` runs everything and publishes it twice: the console
 output into [Results](#results) below, and the same run as data in
-[`results.json`](results.json) — hyperfine's own export at full precision, the
-memory table, the preflight rows, and a bare `node -e ""` timed the same way (the
-launch floor every npm-bin row pays, published as data rather than as a row), with
-the versions and machine listed under [Versions](#versions).
+[`results.json`](results.json) — hyperfine's export at full precision, the memory
+and preflight rows, the versions and machine, and `node_startup`, a bare
+`node -e ""` timed the same way (the launch floor every npm-bin row pays).
 
 ## Notes
 
@@ -74,22 +83,23 @@ the versions and machine listed under [Versions](#versions).
   - [Storybook](https://github.com/storybookjs/storybook) repository (mixed with embedded languages)
   - [Continue](https://github.com/continuedev/continue) repository (full features: sort imports + Tailwind CSS)
   - [Outline](https://github.com/outline/outline) again, scoped to its non-JSX subset (`.ts`/`.js`/`.mjs`) — the set every formatter including tsv supports (fork-added)
-  - A `.svelte`-only snapshot of seven third-party sources: SvelteKit, svelte.dev, layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake — copied from the [fuzdev/corpora](https://github.com/fuzdev/corpora) snapshot at one pinned commit (fork-added)
-  - The same `parser.ts` once more, its own copy, for the tsv delivery comparison — one file, so every row is single-threaded and none gains from core count (fork-added)
+  - 2,226 `.svelte` files from seven third-party sources (SvelteKit, svelte.dev, layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake), read from [fuzdev/corpora](https://github.com/fuzdev/corpora) at a pinned commit (fork-added)
+  - `parser.ts` again for the tsv delivery comparison — one file, so every row is single-threaded (fork-added)
 - **Methodology**:
   - Multiple warmup runs before measurement
   - Multiple benchmark runs for statistical accuracy
   - Git reset before each run to ensure identical starting conditions
-  - hyperfine runs the formatters in the order listed, never interleaved, so on a machine that throttles each later row starts warmer than the one before it — the tsv scenarios idle 10 s before each formatter's warmups to start every row from a more alike package, which narrows that drift without removing it (tsv runs last in them, so what remains biases against it)
-  - Memory usage measured using GNU time (peak RSS) — the largest single process in each command's tree, not the sum, so a Node launcher and the native binary it spawns (Biome, rsvelte-fmt, tsv-npm) are not added together: Biome's and rsvelte-fmt's rows omit their ~45 MB launcher, and tsv-npm's row is its launcher
-  - Local binaries via `./node_modules/.bin/`; tsv is the native binary inside `@fuzdev/tsv`'s platform package (or `TSV_BIN`), tsv-npm runs `@fuzdev/tsv/bin.js` and tsv-wasm `@fuzdev/tsv-wasm/cli.js`, each through a bin shim the harness derives from pnpm's own (the two packages claim the same `tsv` bin name and pnpm links only the WASM one), so they pay the same ~3 ms shell shim every other `.bin/` row pays — [CLAUDE.md](CLAUDE.md) has the detail
-  - tsv is non-configurable (width 100, tabs, single quotes, no trailing commas), so every formatter it is compared against is pinned to that same style — equal break decisions and equal output volume, at the cost of taking each tool off its own defaults
-  - The tsv scenarios run a preflight parse check first — if any formatter rejects a file, that scenario aborts instead of timing a comparison the tools didn't run on the same work
-  - That preflight also cross-checks scope: every formatter reporting a file count must report the same one, and every formatter must have at least one file to change — a mis-scoped tool that formats nothing would otherwise post an unbeatable time
-  - A self-test (`pnpm run preflight-selftest`, also run before the suite) verifies that check can still read each formatter's diagnostics and counts, so the guard can't silently become a no-op after an upgrade
-  - Each scenario prints the corpus commit (or the file's content hash) it ran against, since the cloned corpora track their upstream default branches
-  - Memory ratios are taken against a fixed baseline per scenario (tsv where it runs, oxfmt elsewhere), not against whichever tool used least memory that run, so the column stays comparable across regenerations; a ratio below 1 means less than the baseline
+  - Memory usage measured using GNU time (peak RSS)
+  - Local binaries via `./node_modules/.bin/`
+- **Methodology added by this fork**:
+  - tsv is the native binary inside `@fuzdev/tsv`'s platform package (or `TSV_BIN`, for a local build), not a `.bin/` entry. `tsv-npm` and `tsv-wasm` run through bin shims the harness copies from pnpm's own — both packages claim the `tsv` bin name and pnpm links only one — so they pay the same ~3 ms shell shim as every other `.bin/` row
+  - tsv is non-configurable (width 100, tabs, single quotes, no trailing commas), so every formatter compared against it is pinned to that style: equal break decisions and equal output volume, at the cost of taking each tool off its defaults
+  - The tsv scenarios run a preflight check first and abort rather than time an unequal comparison: if any formatter rejects a file, if the file counts the formatters report differ, or if one has nothing to change (a mis-scoped tool that formats nothing would post an unbeatable time). A self-test (`pnpm run preflight-selftest`, also run before the suite) verifies preflight can still read each formatter's output, so an upgrade can't silently turn the guard into a no-op
+  - hyperfine runs the formatters in the order listed, never interleaved, so on a machine that throttles, later rows run warmer. The tsv scenarios idle 10 s before each formatter to narrow that drift; tsv runs last in them, so what remains biases against it
+  - Peak RSS is the largest single process in a command's tree, not the sum, so a Node launcher and the native binary it spawns are never added together: Biome's and rsvelte-fmt's rows are their binary without the ~45 MB launcher, and tsv-npm's row _is_ its launcher, whatever tsv uses under it
+  - Memory ratios are taken against a fixed baseline per scenario (tsv where it runs, oxfmt elsewhere), not that run's smallest, so the column stays comparable across regenerations; a ratio below 1 means less than the baseline
   - A memory run that dies from a signal is never averaged in: the tsv scenarios abort on one (as their timed runs do, having no `--ignore-failure`), and the other scenarios exclude it and say so under the table
+  - Each scenario prints the corpus commit (or the file's content hash) it ran against, since the cloned corpora track their upstream default branches
 
 ## Versions
 
