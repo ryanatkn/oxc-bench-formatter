@@ -973,7 +973,12 @@ It runs in all four tsv scenarios, for two reasons:
   the wrong distribution under this row's name. It has its own self-test case.
 - **Reading its numbers**: the difference between this row and the tsv row is
   the dispatch cost, and nothing else — same binary, same file, same thread
-  count. Its memory row is **not** the Node process plus the child: GNU time
+  count. That cost is ~30 ms in every scenario, and the bin shim below is only a
+  tenth of it. Layer by layer (`hyperfine -N`, `--version`, 100 warm runs):
+  `node -e ""` 19.5 ms, an empty `.mjs` ~22, a `.mjs` importing the dispatcher's
+  five `node:` builtins 27.0, `node bin.js` 28.9, through the shim 32.4 — against
+  0.8 ms for the binary alone. So ~20 ms is Node, ~10 ms the dispatcher's own
+  ES-module entry, imports, resolve and spawn, ~3 ms the shim. Its memory row is **not** the Node process plus the child: GNU time
   reports the largest single process in the tree, which here is the Node
   dispatcher (~50 MB) whatever the binary under it uses — so the row is flat
   across scenarios and says what the launcher costs, not what tsv does. biome's
