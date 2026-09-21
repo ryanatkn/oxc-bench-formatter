@@ -153,7 +153,7 @@ function buildCases(formatters) {
       detectsCommandErrors: true,
       reportsConsidered: true,
     },
-    // The npm dispatcher forwards the native binary's stdio verbatim, so the
+    // The Node dispatcher forwards the native binary's stdio verbatim, so the
     // same three shared entries apply — checked here for the same reason as the
     // WASM row: the dispatcher is its own published artifact, and it has a
     // fallback path (to the JS CLI) that would change the output if it fired.

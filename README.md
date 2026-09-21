@@ -24,7 +24,7 @@ Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfm
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
 | `tsv`      | the native binary, run directly                                                                                                                                 | every tsv scenario        |
 | `tsv-npm`  | the same binary, started the way an npm install starts it (`npx tsv`, a `package.json` script): `@fuzdev/tsv`'s `tsv` bin, a Node script that spawns the binary | every tsv scenario        |
-| `tsv-wasm` | the same CLI over a WASM engine in Node (`@fuzdev/tsv-wasm`) — the fallback on platforms with no prebuilt binary                                                | `bench-tsv-delivery` only |
+| `tsv-wasm` | the same CLI over a WASM engine in Node (`@fuzdev/tsv-wasm`) — the package for platforms with no prebuilt binary                                                | `bench-tsv-delivery` only |
 
 `tsv` and `tsv-npm` do identical formatting work in the same binary. The only
 difference is the launch in front of `tsv-npm`, a fixed ~30 ms in the results

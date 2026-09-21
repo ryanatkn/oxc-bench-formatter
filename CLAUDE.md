@@ -52,7 +52,7 @@ is upstream's, untouched.
 
 - **Three formatters added**: tsv (the native binary from `@fuzdev/tsv`'s
   platform package, or `TSV_BIN`), rsvelte-fmt, and tsv-wasm — plus a tsv-npm
-  row that is tsv again through its npm dispatcher.
+  row that is tsv again through its Node dispatcher.
 - **Three scenarios added**: `bench-ts-only`, `bench-svelte`,
   `bench-tsv-delivery` — plus their entries in `bench-all.mjs` and `init.sh`.
 - **`bench-large-single-file`** (upstream's) gained a tsv row and a tsv-npm row,
@@ -141,7 +141,7 @@ all, since all of its rows are tsv and tsv is non-configurable.
     location, since pnpm doesn't hoist it). No config file or flags (tsv is
     non-configurable); directory args recurse over `.ts`/`.svelte`/`.css` only.
   - `"tsv-npm"(files)` → `<projectRoot>/node_modules/.bin/bench-tsv-npm format <files>`
-    — the same binary through its npm dispatcher (`@fuzdev/tsv/bin.js`); runs
+    — the same binary through its Node dispatcher (`@fuzdev/tsv/bin.js`); runs
     wherever native tsv does. `"tsv-wasm"` is the same shape over
     `.bin/bench-tsv-wasm`. Both bins are shims the harness derives from pnpm's
     own — `resolveTsvNodeBin`, see "The tsv-npm row".
