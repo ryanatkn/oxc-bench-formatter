@@ -42,13 +42,6 @@ const binEnv = {
 const { bin: tsvBin, source: tsvSource } = resolveTsv(".");
 
 /**
- * The machine the numbers came from. Recorded because the ratios move with it:
- * biome, oxfmt, and tsv all scale across cores while prettier is effectively
- * serial, so a 4-core runner and a 12-thread laptop produce genuinely different
- * comparisons, not noisy versions of one. Without this line the results are not
- * reproducible or interpretable.
- */
-/**
  * How long a bare `node -e ""` takes on this machine, in milliseconds — the floor
  * every npm-bin row pays before its formatter runs (Prettier's, Biome's, Oxfmt's,
  * rsvelte-fmt's, and tsv's dispatcher row all start Node). Measured once per run
@@ -78,10 +71,44 @@ async function measureNodeStartup() {
   }
 }
 
+/**
+ * The machine the numbers came from. Recorded because the ratios move with it:
+ * biome, oxfmt, and tsv all scale across cores while prettier is effectively
+ * serial, so a 4-core runner and a 12-thread laptop produce genuinely different
+ * comparisons, not noisy versions of one. Without it the results are not
+ * reproducible or interpretable.
+ *
+ * Fields, not a display line, so a consumer can compare them: `arch` is
+ * `os.machine()` (`uname -m`: `x86_64`, `aarch64`) rather than Node's
+ * `os.arch()` naming, matching the reports tsv's own benches write.
+ */
 function describeMachine() {
   const cpus = os.cpus();
-  const model = cpus[0]?.model.replace(/\s+/g, " ").trim() ?? "unknown CPU";
-  return `${model} · ${cpus.length} threads · ${os.platform()} ${os.arch()}`;
+  return {
+    cpu_model: cpus[0]?.model.replace(/\s+/g, " ").trim() ?? "unknown CPU",
+    threads: cpus.length,
+    os: os.platform(),
+    arch: os.machine(),
+  };
+}
+
+/** The machine as the README's one line shows it. */
+function formatMachine({ cpu_model, threads, os: platform, arch }) {
+  return `${cpu_model} · ${threads} threads · ${platform} ${arch}`;
+}
+
+/**
+ * The harness revision that ran, read before the run: its commit, and whether
+ * the tree had changes beyond it — a dirty run's numbers came from code no
+ * commit holds. The run itself rewrites README.md and results.json, so this is
+ * only meaningful taken first.
+ */
+async function describeHarness() {
+  const [{ stdout: commit }, { stdout: status }] = await Promise.all([
+    execFileAsync("git", ["rev-parse", "--short", "HEAD"]),
+    execFileAsync("git", ["status", "--porcelain"]),
+  ]);
+  return { git_commit: commit.trim(), git_dirty: status.trim() !== "" };
 }
 
 /**
@@ -164,6 +191,9 @@ async function getVersions() {
       // no usable binary — the tsv rows are missing from the results anyway
     }
 
+    // Where the measured binary came from, beside its version rather than inside
+    // the string: the platform package the lockfile pins, or a TSV_BIN build.
+    let tsvBinary = null;
     if (tsvSource === "TSV_BIN") {
       // A local build's version is a workspace constant that doesn't move
       // between builds, so it can't tell a binary built this morning from one
@@ -171,12 +201,13 @@ async function getVersions() {
       // at 20:57 local reads as the next day in UTC, which wouldn't match
       // `git log --date=short` on the corpus line or the wall calendar of
       // whoever ran the benchmark.
+      let built = null;
       try {
-        const built = (await stat(tsvBin)).mtime.toLocaleDateString("en-CA");
-        tsv = `${tsv} (TSV_BIN, binary built ${built})`;
+        built = (await stat(tsvBin)).mtime.toLocaleDateString("en-CA");
       } catch {
         // no binary to date
       }
+      tsvBinary = { source: "TSV_BIN", built };
     } else if (tsvSource) {
       const [name, version] = tsvSource
         .split("@")
@@ -188,7 +219,7 @@ async function getVersions() {
         );
         process.exit(1);
       }
-      tsv = `${tsv} (@${name})`;
+      tsvBinary = { source: "package", package: `@${name}` };
     }
 
     // @fuzdev/tsv-wasm is an npm package, but not one `vp exec` can reach: its
@@ -223,6 +254,7 @@ async function getVersions() {
       oxfmt: oxfmt.stdout.trim().replace("Version: ", ""),
       rsvelte: rsvelte.stdout.trim().replace("rsvelte_fmt ", ""),
       tsv,
+      tsvBinary,
       tsvWasm,
       node,
     };
@@ -230,6 +262,17 @@ async function getVersions() {
     console.error("Error fetching versions:", error);
     process.exit(1);
   }
+}
+
+/** tsv's version as the README lists it, naming the binary's source. */
+function formatTsvVersion({ tsv, tsvBinary }) {
+  if (tsvBinary?.source === "package") return `${tsv} (${tsvBinary.package})`;
+  if (tsvBinary?.source === "TSV_BIN") {
+    return tsvBinary.built
+      ? `${tsv} (TSV_BIN, binary built ${tsvBinary.built})`
+      : `${tsv} (TSV_BIN)`;
+  }
+  return tsv;
 }
 
 async function updateReadme(benchmarkResults, versions) {
@@ -268,7 +311,7 @@ ${benchmarkResults}
   // Node is listed with the formatters because five of the rows are a Node
   // process: both prettiers, tsv-npm, tsv-wasm, and the launchers biome and
   // rsvelte-fmt start with.
-  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **rsvelte-fmt**: ${versions.rsvelte}\n- **tsv**: ${versions.tsv}\n- **tsv-wasm**: ${versions.tsvWasm}\n- **Node**: ${versions.node}\n\n_Measured on: ${describeMachine()} — the ratios below depend on the core count._`;
+  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **rsvelte-fmt**: ${versions.rsvelte}\n- **tsv**: ${formatTsvVersion(versions)}\n- **tsv-wasm**: ${versions.tsvWasm}\n- **Node**: ${versions.node}\n\n_Measured on: ${formatMachine(describeMachine())} — the ratios below depend on the core count._`;
 
   if (!versionsRegex.test(readmeContent)) {
     // Fail rather than warn: writing fresh numbers under a stale version list is
@@ -291,11 +334,14 @@ ${benchmarkResults}
  * `bench-all.mjs` emptied before the run, so these are this run's and nothing
  * else's. They are joined here with the same versions and machine line the
  * README gets, in the order the scenarios ran. tsv.fuz.dev's generator reads
- * this file, so its keys are a consumed interface: `machine`, `node_startup`
- * (see `measureNodeStartup`), `versions` keyed by formatter name plus the `node`
- * the Node-launched rows ran on, and `scenarios` of records.
+ * this file, so its keys are a consumed interface: `timestamp` (when the run
+ * started), `git_commit` / `git_dirty` (see `describeHarness`), `machine` (see
+ * `describeMachine`), `node_startup` (see `measureNodeStartup`), `versions`
+ * keyed by formatter name plus the `node` the Node-launched rows ran on,
+ * `tsv_binary` (where the native tsv rows' binary came from), and `scenarios` of
+ * records.
  */
-async function composeResults(versions, runStartedAt) {
+async function composeResults(versions, harness, runStartedAt) {
   const files = (await readdir(RESULTS_DIR)).filter((file) => file.endsWith(".json"));
   if (files.length === 0) {
     // Same reasoning as the versions list below: a README with fresh numbers
@@ -318,6 +364,8 @@ async function composeResults(versions, runStartedAt) {
     .map(({ scenario: _scenario, started_at: _startedAt, ...rest }) => rest);
 
   return {
+    timestamp: new Date(runStartedAt).toISOString(),
+    ...harness,
     machine: describeMachine(),
     node_startup: await measureNodeStartup(),
     versions: {
@@ -329,6 +377,7 @@ async function composeResults(versions, runStartedAt) {
       "tsv-wasm": versions.tsvWasm,
       node: versions.node,
     },
+    tsv_binary: versions.tsvBinary,
     scenarios,
   };
 }
@@ -342,6 +391,7 @@ async function main() {
     // here on reads local files, so the machine can be disconnected first.
     assertBenchReady(".");
     await prepareTsv();
+    const harness = await describeHarness();
     const runStartedAt = Date.now();
     const benchmarkOutput = await runBenchmark();
     const results = extractBenchmarkResults(benchmarkOutput);
@@ -349,7 +399,7 @@ async function main() {
     // Composed before the README is touched and written after it: both can
     // refuse (no records, no versions section), and each refuses before writing,
     // so a refusal leaves the pair as it was rather than one fresh and one stale.
-    const data = await composeResults(versions, runStartedAt);
+    const data = await composeResults(versions, harness, runStartedAt);
     await updateReadme(results, versions);
     await writeFile("results.json", `${JSON.stringify(data, null, 2)}\n`);
 

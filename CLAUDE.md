@@ -494,9 +494,11 @@ tsv's from the resolved binary's `--version` — it's a native binary, so `vp ex
 can't reach it, and asking the binary means the published version names the
 build that was actually measured. When that binary is the platform package's,
 the version is cross-checked against the package's own and the run refuses to
-publish a mismatch, and the line names the package (`0.3.0
+publish a mismatch, and the README line names the package (`0.3.0
 (@fuzdev/tsv-linux-x64-gnu)`); with `TSV_BIN` it names the binary's mtime
 instead, since a local build's version string doesn't move between builds.
+`results.json` keeps the bare version in `versions.tsv` and records the source
+beside it, in `tsv_binary`.
 tsv-wasm's comes from its installed `package.json`: an npm package, but one
 whose bin can't be addressed by name (see the tsv-wasm section) and whose CLI
 has no `--version`. CI (`.github/workflows/ci.yml`) runs `vp run bench` on
@@ -536,9 +538,14 @@ shape: union this fork's added dep with upstream's bump.
 **`results.json` is a consumed interface; the README block is for readers.**
 [tsv.fuz.dev](https://tsv.fuz.dev/docs/benchmarks) renders these numbers on its
 benchmarks page, and its generator reads `results.json`, which `update-readme`
-writes beside the README from the same run: `machine`, `node_startup`, `versions`
-keyed by formatter name plus the `node` the Node-launched rows ran on, and one
-record per scenario in run order — `id` (the slug of the
+writes beside the README from the same run: `timestamp` (when the run started),
+`git_commit` / `git_dirty` (the harness revision that ran, read before the run),
+`machine` as fields (`cpu_model`, `threads`, `os`, `arch` in `uname -m` naming,
+as tsv's own bench reports write it — the site checks the two agree),
+`node_startup`, `versions` keyed by formatter name plus the `node` the
+Node-launched rows ran on (tsv's a bare version), `tsv_binary` (where the native
+tsv rows' binary came from: the platform package, or a dated `TSV_BIN` build),
+and one record per scenario in run order — `id` (the slug of the
 banner title, which that site keys its per-scenario copy on), `name`, `target`,
 `corpus` (the provenance line — which revision of the corpus these numbers came
 from), `warmup_runs` / `benchmark_runs`, `settle_seconds` in the scenarios that settle,

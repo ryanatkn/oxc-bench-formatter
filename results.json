@@ -1,5 +1,13 @@
 {
-  "machine": "AMD Ryzen 5 PRO 7530U with Radeon Graphics · 12 threads · linux x64",
+  "timestamp": "2026-09-20T11:59:28.000Z",
+  "git_commit": "d9475fd",
+  "git_dirty": true,
+  "machine": {
+    "cpu_model": "AMD Ryzen 5 PRO 7530U with Radeon Graphics",
+    "threads": 12,
+    "os": "linux",
+    "arch": "x86_64"
+  },
   "node_startup": {
     "mean_ms": 18.814,
     "stddev_ms": 0.667,
@@ -10,9 +18,13 @@
     "biome": "2.5.13",
     "oxfmt": "0.68.0",
     "rsvelte-fmt": "0.7.23",
-    "tsv": "0.4.1 (@fuzdev/tsv-linux-x64-gnu)",
+    "tsv": "0.4.1",
     "tsv-wasm": "0.4.1",
     "node": "24.14.1"
+  },
+  "tsv_binary": {
+    "source": "package",
+    "package": "@fuzdev/tsv-linux-x64-gnu"
   },
   "scenarios": [
     {

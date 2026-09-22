@@ -68,9 +68,9 @@ and stalls for a minute before the script starts.
 output into [Results](#results) below, and the same run as data in
 [`results.json`](results.json) — one record per scenario (the corpus revision it
 ran on, timings from hyperfine's own export rather than scraped text, the memory
-and preflight rows),
-the versions and machine, and `node_startup`, a bare `node -e ""` timed the same
-way (the launch floor every npm-bin row pays).
+and preflight rows), when and from which harness commit it ran, the versions and
+machine, and `node_startup`, a bare `node -e ""` timed the same way (the launch
+floor every npm-bin row pays).
 
 ## Notes
 
