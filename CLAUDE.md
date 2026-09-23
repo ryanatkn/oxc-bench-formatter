@@ -27,10 +27,10 @@ A benchmark suite comparing JS/TS formatters on **execution time** (via
   `bench-ts-only`, `bench-large-single-file` and `bench-svelte` it is tsv on the
   same footing as the other tools' Node bins, in `bench-tsv-delivery` one of the
   three distributions. Also fork-added.
-- **tsv-wasm** (`@fuzdev/tsv-wasm`) — the same tsv CLI source over a WASM engine
-  in Node; the distribution anyone on a platform without a prebuilt native binary
-  falls back to. Runs only in `bench-tsv-delivery`, against native tsv. Also
-  fork-added.
+- **tsv-wasm** (`@fuzdev/tsv-wasm`) — tsv's CLI contract, mirrored in JS, over a
+  WASM engine in Node; the distribution anyone on a platform without a prebuilt
+  native binary falls back to. Runs only in `bench-tsv-delivery`, against native
+  tsv. Also fork-added.
 
 This suite measures the whole **CLI** (process spawn + I/O + multi-file parallel
 batch + RSS). A complementary fork,
@@ -918,9 +918,11 @@ without a prebuilt native binary falls back to. It runs in one scenario,
   package manager's tie-break, not a contract — a row addressed by that name
   would change distribution under another package manager or a renamed package,
   and this row has to be the WASM one every time.
-- **Same CLI source as the native binary** — subcommands, flags, exit codes,
-  traversal and hierarchical-ignore rules, diagnostics, and the
-  `N would change, M unchanged` summary line, all identical. So it shares tsv's
+- **Same CLI contract as the native binary**, mirrored in JS (`cli.js`, the one
+  source both `@fuzdev/tsv-wasm` and `@fuzdev/tsv`'s fallback ship) —
+  subcommands, flags, exit codes, traversal and hierarchical-ignore rules,
+  diagnostics, and the `N would change, M unchanged` summary line, all
+  identical. So it shares tsv's
   entries in all three preflight tables (`TSV_DIAGNOSTIC`, `TSV_SCOPE_COUNTS`,
   and an error signal that also catches Node's own `Cannot find module` — the
   failure mode a path-addressed script has and a bin doesn't). It still carries

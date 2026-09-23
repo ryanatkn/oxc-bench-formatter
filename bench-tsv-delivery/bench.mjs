@@ -6,9 +6,10 @@
 // `@fuzdev/tsv-<triple>` platform package (or a local build via `TSV_BIN`); that
 // same binary reached through `@fuzdev/tsv`'s `tsv` bin, a Node dispatcher that
 // spawns it — the way `npx tsv` and most npm installs run it; and
-// `@fuzdev/tsv-wasm`, which runs the same CLI source over a WASM engine in Node
-// and is the universal fallback on platforms with no prebuilt binary. Same
-// formatter, same output — three very different deliveries.
+// `@fuzdev/tsv-wasm`, which runs the same CLI contract, mirrored in JS, over a
+// WASM engine in Node and is the universal fallback on platforms with no
+// prebuilt binary. Same formatter, same output — three very different
+// deliveries.
 //
 // That question is deliberately kept out of the comparison scenarios. A row
 // belongs there if it is the honest counterpart to how the *other* tools in that
@@ -69,7 +70,7 @@ async function main() {
   console.log("- Copy original before each run");
   console.log("");
 
-  // The three rows share one CLI source, so they share preflight's tsv matchers
+  // The three rows share one CLI contract, so they share preflight's tsv matchers
   // and must report identical counts — which makes the scope cross-check a real
   // assertion that all of them are formatting the same file, not three spellings
   // of one tool trivially agreeing. The npm row's preflight also catches the
