@@ -209,15 +209,15 @@ all, since all of its rows are tsv and tsv is non-configurable.
 
 ## Scenarios
 
-| Dir                       | Corpus                                                                             | Reset / prepare                                                    | warmup × runs | Formatters run             |
-| ------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------- | -------------------------- |
-| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                           | `cp parser.ts.bak parser.ts`                                       | 3 × 20        | all 5 (incl. tsv), tsv-npm |
-| `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                      | `git reset --hard`                                                 | 3 × 10        | all 4 (no tsv — JSX/TSX)   |
-| `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)             | `git reset --hard` + rm stray prettier configs                     | 1 × 3         | prettier+oxc, oxfmt        |
-| `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)      | `git reset --hard` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt        |
-| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset (`.ts`/`.js`/`.mjs`) | `git reset --hard` (its own outline checkout)                      | 3 × 10        | all 5 (incl. tsv), tsv-npm |
-| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section)     | `git reset --hard` (snapshot repo built by `setup-corpus.mjs`)     | 3 × 10        | tsv, tsv-npm, rsvelte-fmt  |
-| `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                       | `cp parser.ts.bak parser.ts`                                       | 3 × 20        | tsv, tsv-npm, tsv-wasm     |
+| Dir                       | Corpus                                                                         | Reset / prepare                                                    | warmup × runs | Formatters run             |
+| ------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------- | -------------------------- |
+| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                       | `cp parser.ts.bak parser.ts`                                       | 3 × 20        | all 5 (incl. tsv), tsv-npm |
+| `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                  | `git reset --hard`                                                 | 3 × 10        | all 4 (no tsv — JSX/TSX)   |
+| `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)         | `git reset --hard` + rm stray prettier configs                     | 1 × 3         | prettier+oxc, oxfmt        |
+| `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)  | `git reset --hard` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt        |
+| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset                  | `git reset --hard` (its own outline checkout)                      | 3 × 10        | all 5 (incl. tsv), tsv-npm |
+| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section) | `git reset --hard` (snapshot repo built by `setup-corpus.mjs`)     | 3 × 10        | tsv, tsv-npm, rsvelte-fmt  |
+| `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                   | `cp parser.ts.bak parser.ts`                                       | 3 × 20        | tsv, tsv-npm, tsv-wasm     |
 
 **Quick runs**: the four tsv scenarios (`bench-large-single-file`,
 `bench-ts-only`, `bench-svelte`, `bench-tsv-delivery`) take

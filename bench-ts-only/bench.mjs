@@ -47,7 +47,9 @@ async function main() {
   printCorpus(describeCorpus(dataDir));
   printRunCounts();
   console.log("- Git reset before each run");
-  console.log("- .ts/.js/.mjs only: the common file set every formatter (incl. tsv) supports");
+  console.log(
+    "- .ts/.mts/.cts/.js/.mjs/.cjs only: the common file set every formatter (incl. tsv) supports",
+  );
   console.log("");
 
   // tsv runs twice. The other four are timed the way npm installs them, through
