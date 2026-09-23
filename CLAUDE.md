@@ -934,10 +934,11 @@ without a prebuilt native binary falls back to. It runs in one scenario,
   threshold, so every row is honestly single-threaded and the comparison is the
   fixed cost of each delivery, where a tree would fold core count and two
   different pools' warm-up into what reads as engine cost.
-- **Reading its numbers**: `[User: …]` is not an engine proxy here. Node compiles
-  the WASM module on background threads, so the wasm row's User time can run well
-  above its wall time even on a single file, and by a margin that varies run to
-  run — that's compilation, not formatting.
+- **Reading its numbers**: `[User: …]` is not an engine proxy here. V8 tiers hot
+  wasm functions up on background threads (baseline compilation is lazy, on the
+  main thread), so the wasm row's User time can run well above its wall time even
+  on a single file, and by a margin that varies run to run — that's compilation,
+  not formatting.
   The memory row is likewise the whole Node process: heap plus the wasm
   instance's linear memory, which is the honest figure for this distribution but
   not an engine-vs-engine comparison with the native binary's RSS.
