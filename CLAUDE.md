@@ -539,7 +539,8 @@ shape: union this fork's added dep with upstream's bump.
 [tsv.fuz.dev](https://tsv.fuz.dev/docs/benchmarks) renders these numbers on its
 benchmarks page, and its generator reads `results.json`, which `update-readme`
 writes beside the README from the same run: `timestamp` (when the run started),
-`git_commit` / `git_dirty` (the harness revision that ran, read before the run),
+`git_commit` / `git_dirty` (the harness revision that ran, read before the run;
+dirty ignores `README.md` and `results.json`, a previous run's output),
 `machine` as fields (`cpu_model`, `threads`, `os`, `arch` in `uname -m` naming,
 as tsv's own bench reports write it — the site checks the two agree),
 `node_startup`, `versions` keyed by formatter name plus the `node` the
@@ -551,7 +552,8 @@ banner title, which that site keys its per-scenario copy on), `name`, `target`,
 from), `warmup_runs` / `benchmark_runs`, `settle_seconds` in the scenarios that settle,
 the `preflight` rows, `timings` in
 milliseconds from hyperfine's own `--export-json`, `fastest` and `speedups`
-(hyperfine's `Summary`, recomputed from the same means since it isn't exported),
+(hyperfine's `Summary`, recomputed from the same means since it isn't exported;
+`fastest` is absent when nothing was timed),
 the `memory` rows in megabytes (their ratios against the scenario's fixed memory
 baseline, which is the one row carrying none — not necessarily `fastest`), and
 `aborted` / `unshimmed` when they apply.
@@ -827,10 +829,10 @@ formatters, on `.svelte` files only.
   `rm -rf bench-svelte/data && node ./bench-svelte/setup-corpus.mjs`.
 - **No `--ignore-failure`** (alone among the scenarios): both formatters exit 0
   on a successful write run, so any non-zero exit here is a real error — and
-  rsvelte-fmt has a nondeterministic SIGABRT (its launcher propagates signal
-  deaths as exit 128+n, e.g. 134), which must abort the benchmark rather than be
-  timed as a fast partial run. It is not rare, and it is **not uniform across the
-  scenario's three passes**. Counted over this corpus:
+  rsvelte-fmt 0.7.x has a SIGABRT (its launcher propagates signal deaths as exit
+  128+n, e.g. 134) that must abort the benchmark rather than be timed as a fast
+  partial run. It fires only when stdout and stderr **share one pipe**, on the
+  pass that prints bulk output. Counted over this corpus:
 
   | version | pass                            | stdio              | crashes  |
   | ------- | ------------------------------- | ------------------ | -------- |
@@ -845,39 +847,34 @@ formatters, on `.svelte` files only.
   | 0.7.11  | `--check`                       | both on one pipe   | 8 / 40   |
   | 0.7.11  | write                           | both on one pipe   | 0 / 40   |
 
-  So the trigger is **not** "a pipe" but stdout and stderr **sharing one** pipe,
-  on the pass that writes bulk output: check mode prints a `would format <path>`
-  line per rewritten file (~2,000) while the launcher and its oxfmt leg write to
-  stderr, and only when both land on the same pipe does it abort. Either stream
-  piped alone is clean, as is `/dev/null` and as is a file. Write mode prints one
-  summary line and has not crashed in 250 shared-pipe runs across both versions.
+  **The cause is EAGAIN on a non-blocking stdout.** The native binary launches
+  oxfmt under Node, with inherited stdio, for the non-`.svelte` leg while its own
+  threads are still printing; oxfmt writes to stderr, and libuv sets `O_NONBLOCK`
+  on that pipe. With `2>&1`, stderr is a dup of stdout — one open file
+  description — so the binary's stdout turns non-blocking too. Check mode prints
+  a `would format <path>` line per rewritten file (~2,000, well past a 64 KiB
+  pipe buffer); when the reader falls behind, a write returns EAGAIN, Rust's
+  `println!` panics (`failed printing to stdout: Resource temporarily
+unavailable (os error 11)`), and the release build aborts. The panic message is
+  usually lost, since stderr is the same full pipe; it surfaced once in a dozen
+  crashes. That accounts for every row above: a file or `/dev/null` never returns
+  EAGAIN, split streams keep oxfmt's flag off the binary's stdout, hyperfine
+  gives the children `/dev/null`, write mode prints one line, and a slower reader
+  crashes more often. A crashed check was also **truncated** (514 of 2029 lines,
+  cut at the same file twice), so its "no matcher hits" would have read as clean
+  over a corpus mostly never checked — which is why a crash aborts rather than
+  passing.
 
-  That is exactly and only what `runPreflight` does — `execSync(cmd + " 2>&1", {stdio: "pipe"})`
-  — so the whole risk sits in the check pass. **The timed and memory runs carry
-  none of it**: hyperfine does not hand its children a shared pipe (30 runs of the
-  _crash-prone check_ command under it: zero), and the memory pass does merge but
-  runs the one-line write command. So **the run counts do not move the abort
-  odds**, which is why this scenario runs `bench-ts-only`'s 3 × 10.
+  **`runPreflight` merges into a file, not a pipe** (`cmd > file 2>&1`, read back
+  after), which keeps the interleaved diagnostics the matchers read and never
+  returns EAGAIN: 0 crashes in 25 consecutive preflights where the shared pipe
+  had crashed 7 of 12. It is a harness-level dodge of a real rsvelte-fmt defect —
+  `rsvelte-fmt --check … 2>&1 | tee` in CI still hits it — so a rsvelte-fmt
+  upgrade is worth re-checking against a shared pipe. The timed runs never had
+  the exposure (hyperfine, above), and the memory pass, which still merges into
+  a pipe, runs the one-line write command.
 
-  **Rate, measured end to end: 32 of 50 attempts at `node bench-svelte/bench.mjs`
-  aborted — about two in three, so a publishable run takes ~3 attempts.** Quote
-  that number, not the per-invocation ones above: crash frequency rises sharply
-  the slower the pipe is drained and the colder the process is, so the same
-  command reads 24/100 piped to `cat`, 12/40 under a bare `execSync`, and ~64%
-  through the real entry point. All 50 aborts were `crashed: rsvelte-fmt`; the
-  preflight row and the record's `aborted` name it correctly every time.
-
-  The abort is not an overreaction to a cosmetic race: a crashed check is
-  **truncated**, twice measured at 514 of 2029 lines and cut at the same file, so
-  ~75% of the corpus went unreported. "No matcher hits" on that output would read
-  as "clean" while most files were never checked — which is precisely what the
-  crashed-check rule exists to refuse. Keeping the merge is therefore deliberate
-  on two counts: the diagnostics really are unusable, and `… 2>&1 | tee` is how
-  CI runs a formatter, so the defect has real exposure and publishing the abort
-  is the honest outcome. (Splitting the streams and concatenating them in JS
-  would dodge the crash and cost nothing in matching — the matchers are per-line
-  — but it would make this harness the one place that stops seeing the bug.)
-  **An aborted scenario is publishable.** It
+  **An aborted scenario is publishable**, should any abort remain. It
   writes its banner, preflight rows, and the `→ aborting:` line into the README
   with no timings under it, and records the same in `results.json` (`aborted`,
   the preflight rows, no timings); tsv.fuz.dev renders the scenario as aborted —
@@ -886,8 +883,7 @@ formatters, on `.svelte` files only.
   run killed by a signal there aborts after timing, so the block carries timings
   and a `Summary` but no `Memory Usage:` table, the record carries timings and
   `aborted` but no `memory`, and the site renders the times with the abort note
-  under them. Rerun if you want numbers; commit the abort if you don't get
-  them.
+  under them.
 
 - **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 BENCH_SETTLE_S=0 node ./bench-svelte/bench.mjs`
   overrides the scenario's default run counts for a fast, low-accuracy smoke run — see "Quick

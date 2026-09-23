@@ -86,9 +86,10 @@ async function main() {
   // tsv runs twice: rsvelte-fmt is timed through its npm bin, a Node launcher
   // that execs its native binary, so tsv-npm — tsv through its own Node
   // dispatcher — is the like-for-like row against it, and bare tsv stays as the
-  // baseline every ratio is taken against. A nondeterministic SIGABRT has been
-  // observed in rsvelte-fmt 0.7.4, 0.7.11 and 0.7.23; benchRows fails the
-  // scenario on it rather than time a crashed partial run as a fast pass.
+  // baseline every ratio is taken against. rsvelte-fmt 0.7.x SIGABRTs when its
+  // stdout and stderr share a pipe (see `runPreflight`); should one fire anyway,
+  // benchRows fails the scenario rather than time a crashed partial run as a
+  // fast pass.
   await benchRows(
     [
       {

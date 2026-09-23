@@ -74,8 +74,9 @@ function beginRecord(title) {
     unshimmed: [],
     timings: [],
     // the fastest timed row, which `speedups` are taken against — hyperfine's
-    // choice, distinct from the fixed `baseline` the memory ratios anchor on
-    fastest: "",
+    // choice, distinct from the fixed `baseline` the memory ratios anchor on;
+    // absent (`JSON.stringify` drops the undefined) when nothing was timed
+    fastest: undefined,
     speedups: [],
     memory: [],
   };
@@ -821,7 +822,7 @@ const PREFLIGHT_ERROR_SIGNALS = {
  * the same one, and every formatter must have at least one file to change.
  *
  * Returns `{failures, excluded, unavailable, crashed, unmatched, errored,
- * oversized, counts}` on a clean pass. Reports everything it found before
+ * counts}` on a clean pass. Reports everything it found before
  * throwing; never silently drops anything. `quiet` suppresses that reporting and
  * is meant for
  * `preflight-selftest.mjs`, which drives this function many times over fixtures
@@ -844,27 +845,28 @@ export function runPreflight(checks, { quiet = false } = {}) {
   const crashed = [];
   const unmatched = [];
   const errored = [];
-  const oversized = [];
   const counts = {};
+  // Each check's stdout and stderr are merged into this file, never a pipe: see
+  // the comment on the `execSync` below.
+  const outputPath = join(tmpdir(), `bench-formatter-preflight-${process.pid}.log`);
 
   for (const { name, command } of checks) {
     let output = "";
     let launchFailed = false;
     let crashStatus = null;
-    let truncated = false;
     try {
-      // execSync defaults to a 1MB buffer, and overflowing it throws ENOBUFS with
-      // a partial stdout and no exit status — diagnostics would be silently cut
-      // off and read as fewer rejections. A check pass over a large corpus prints
-      // a line per file (prettier does), so raise the ceiling and treat an
-      // overflow as unreadable rather than as a result.
-      output = execSync(`${command} 2>&1`, {
-        encoding: "utf8",
-        stdio: "pipe",
-        maxBuffer: 256 * 1024 * 1024,
-      });
+      // Merged in order, as `2>&1` into a pipe would be, but into a file. A shared
+      // pipe crashes rsvelte-fmt 0.7.x: its native binary launches oxfmt under
+      // Node (with inherited stdio) for non-.svelte files while its own threads
+      // are still printing, oxfmt writes to stderr, and libuv sets O_NONBLOCK on
+      // that pipe — which, with stderr a dup of stdout, is also the binary's
+      // stdout. Its per-file check output then outruns the reader, a write
+      // returns EAGAIN, and Rust's `println!` panics ("failed printing to stdout:
+      // Resource temporarily unavailable"), which its release build turns into a
+      // SIGABRT — killing the check partway through about half the time. A file
+      // never returns EAGAIN, and needs no capture buffer to overflow either.
+      execSync(`${command} > ${outputPath} 2>&1`, { stdio: "ignore" });
     } catch (error) {
-      truncated = error.code === "ENOBUFS";
       // check mode exits non-zero for "would change" and for real errors alike,
       // so a normal non-zero exit carries no signal — the diagnostics do. But a
       // 126/127 (or a spawn ENOENT) means the command never launched: a missing
@@ -876,20 +878,19 @@ export function runPreflight(checks, { quiet = false } = {}) {
       // binary's signal the same way). A crash mid-check means the diagnostics
       // are incomplete, so "no matcher hits" must not read as "clean".
       crashStatus = typeof error.status === "number" && error.status >= 128 ? error.status : null;
-      output = `${error.stdout ?? ""}${error.stderr ?? ""}`;
+    }
+    try {
+      output = readFileSync(outputPath, "utf8");
+    } catch {
+      // no file only when the shell itself never started — `launchFailed` covers it
+    } finally {
+      rmSync(outputPath, { force: true });
     }
 
     if (launchFailed) {
       failures[name] = [];
       unavailable.push(name);
       log(`  ${name}: unavailable (command failed to launch)`);
-      continue;
-    }
-
-    if (truncated) {
-      failures[name] = [];
-      oversized.push(name);
-      log(`  ${name}: output too large to capture — diagnostics incomplete`);
       continue;
     }
 
@@ -954,11 +955,6 @@ export function runPreflight(checks, { quiet = false } = {}) {
   for (const name of unmatched) {
     log(`  → ${name} has no matcher in PREFLIGHT_MATCHERS — add one before benching it`);
   }
-  for (const name of oversized) {
-    log(
-      `  → ${name} printed more than could be captured — raise maxBuffer in runPreflight before trusting this corpus`,
-    );
-  }
   for (const name of errored) {
     log(
       `  → ${name} failed at the command level, not on a file — check its config, plugins, and paths`,
@@ -973,7 +969,6 @@ export function runPreflight(checks, { quiet = false } = {}) {
   if (crashed.length > 0) problems.push(`crashed: ${crashed.join(", ")}`);
   if (unmatched.length > 0) problems.push(`no diagnostic matcher: ${unmatched.join(", ")}`);
   if (errored.length > 0) problems.push(`errored without naming a file: ${errored.join(", ")}`);
-  if (oversized.length > 0) problems.push(`output too large to capture: ${oversized.join(", ")}`);
 
   // Every formatter must have work to do. A count that didn't parse is treated as
   // no work rather than waved through — for prettier that IS the zero-scope
@@ -1009,7 +1004,6 @@ export function runPreflight(checks, { quiet = false } = {}) {
     crashed,
     unmatched,
     errored,
-    oversized,
     counts,
   };
 
@@ -1239,9 +1233,9 @@ export async function runMemoryBenchmarks(benchmarks, runs, { baseline, failOnCr
       .join("; ");
     console.log("");
     console.log(`  → aborting: ${detail} — a crash must fail the scenario, not thin its row`);
-    if (record) {
-      record.aborted = `${detail} — a crash must fail the scenario, not thin its row`;
-    }
+    // the fact, not the rationale: the record is published, and the reason a
+    // crash aborts is the harness's policy rather than something this run found
+    if (record) record.aborted = detail;
     throw new Error(`memory measurement failed — ${detail}`);
   }
 
@@ -1328,11 +1322,11 @@ export function checkGnuTime() {
 // Returns `{name, runs, crashes, mean, min, max, stddev}` — `mean` (and the rest)
 // null when no run produced a measurement, `crashes` the number of runs the
 // command died from a signal in, which are excluded: the peak RSS of a process
-// that was killed partway is not the cost of the job, and a nondeterministic
-// SIGABRT (rsvelte-fmt has one) would otherwise average in unremarked. A run
-// that exits non-zero on its own — a formatter erroring on some file, which the
-// timed pass tolerates too under `--ignore-failure` — did the whole job, so its
-// peak counts.
+// that was killed partway is not the cost of the job, and a SIGABRT (rsvelte-fmt
+// has one, on a shared stdout/stderr pipe) would otherwise average in
+// unremarked. A run that exits non-zero on its own — a formatter erroring on
+// some file, which the timed pass tolerates too under `--ignore-failure` — did
+// the whole job, so its peak counts.
 async function measureMemory(name, command, prepareCmd, runs) {
   if (!gnuTimeBinary) {
     return null;

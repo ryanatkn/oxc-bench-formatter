@@ -100,13 +100,21 @@ function formatMachine({ cpu_model, threads, os: platform, arch }) {
 /**
  * The harness revision that ran, read before the run: its commit, and whether
  * the tree had changes beyond it — a dirty run's numbers came from code no
- * commit holds. The run itself rewrites README.md and results.json, so this is
- * only meaningful taken first.
+ * commit holds. README.md and results.json are left out of that: they are what
+ * a run writes, not code it runs, so a rerun before the last one's output is
+ * committed (retrying an aborted scenario, say) still reads clean.
  */
 async function describeHarness() {
   const [{ stdout: commit }, { stdout: status }] = await Promise.all([
     execFileAsync("git", ["rev-parse", "--short", "HEAD"]),
-    execFileAsync("git", ["status", "--porcelain"]),
+    execFileAsync("git", [
+      "status",
+      "--porcelain",
+      "--",
+      ".",
+      ":(exclude)README.md",
+      ":(exclude)results.json",
+    ]),
   ]);
   return { git_commit: commit.trim(), git_dirty: status.trim() !== "" };
 }
