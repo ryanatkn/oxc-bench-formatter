@@ -1032,6 +1032,11 @@ export function runPreflight(checks, { quiet = false } = {}) {
 
   log("  → all formatters accept the whole corpus; nothing excluded");
 
+  // The file count every counting formatter just agreed on — the size of the job,
+  // which the corpus line (a revision, not a size) doesn't say. Absent when no
+  // formatter in the scenario reports one.
+  if (record && !quiet && sizes.size === 1) record.files = [...sizes][0];
+
   return report;
 }
 

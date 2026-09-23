@@ -543,14 +543,16 @@ writes beside the README from the same run: `timestamp` (when the run started),
 dirty ignores `README.md` and `results.json`, a previous run's output),
 `machine` as fields (`cpu_model`, `threads`, `os`, `arch` in `uname -m` naming,
 as tsv's own bench reports write it — the site checks the two agree),
-`node_startup`, `versions` keyed by formatter name plus the `node` the
+`node_startup`, `versions` keyed by formatter name plus
+`@prettier/plugin-oxc` (the prettier+oxc-parser row's plugin) and the `node` the
 Node-launched rows ran on (tsv's a bare version), `tsv_binary` (where the native
 tsv rows' binary came from: the platform package, or a dated `TSV_BIN` build),
 and one record per scenario in run order — `id` (the slug of the
 banner title, which that site keys its per-scenario copy on), `name`, `target`,
 `corpus` (the provenance line — which revision of the corpus these numbers came
 from), `warmup_runs` / `benchmark_runs`, `settle_seconds` in the scenarios that settle,
-the `preflight` rows, `timings` in
+the `preflight` rows, `files` (the file count preflight's counting formatters
+agreed on, where one reports it), `timings` in
 milliseconds from hyperfine's own `--export-json`, `fastest` and `speedups`
 (hyperfine's `Summary`, recomputed from the same means since it isn't exported;
 `fastest` is absent when nothing was timed),
