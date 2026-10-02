@@ -74,6 +74,12 @@ is upstream's, untouched.
   Node launch floor (`node_startup`). The two lines every scenario changed for it,
   upstream's three included, are its `Target:` and `Corpus:` lines, now
   `printTarget(…)` / `printCorpus(…)`.
+- **The cloned corpora are pinned**: upstream's `init.sh` and workflows clone
+  outline, storybook and continue at whatever their default branch points at;
+  here `shared/corpus-pins.mjs` names a commit for each, `init.sh` clones through
+  `shared/clone-corpus.mjs`, the workflows' checkout steps carry the same SHAs as
+  `ref:`, and the readiness check refuses a checkout at any other commit (see
+  "Every corpus is pinned" under Running).
 - **Setup is never auto-run**: upstream's `bench-all.mjs` shells out to
   `./init.sh` when a corpus is missing; here it stops with `assertBenchReady`, so
   the one networked step stays outside the benchmark (see Running). `package.json`
@@ -94,6 +100,8 @@ bench-formatter/
 ├── init.sh                          # the one networked step: install deps, clone data repos, download parser.ts, check the tsv binary resolves
 ├── preflight-selftest.mjs           # verify preflight's matchers still read each tool's diagnostics
 ├── shared/utils.mjs                 # the harness: formatter commands + hyperfine + memory
+├── shared/corpus-pins.mjs           # the commits the cloned corpora are pinned to, and the check that they're there
+├── shared/clone-corpus.mjs          # clone one corpus at its pin (what init.sh runs)
 ├── bench-large-single-file/         # one scenario per dir (structure below)
 ├── bench-js-no-embedded/
 ├── bench-mixed-embedded/
@@ -195,7 +203,7 @@ all, since all of its rows are tsv and tsv is non-configurable.
   relative config/data paths resolve.
 - **`assertBenchReady(projectRoot)`** / **`missingBenchSetup`** — the gate
   `bench-all.mjs` and `update-readme` open with (dependencies, the seven
-  corpora, hyperfine), and the list behind it, which `init.sh` closes on too
+  corpora, each cloned one at its pinned commit, hyperfine), and the list behind it, which `init.sh` closes on too
   (see "Setup is separate on purpose" under Running).
 - **`benchRunCounts(warmup, runs)`** — a scenario's run counts, with
   `BENCH_WARMUP` / `BENCH_RUNS` overrides for smoke runs (see "Quick runs"
@@ -434,7 +442,7 @@ node bench-all-and-update-readme.mjs
 ```
 
 **Setup is separate on purpose, and the network stops there.** `./init.sh` holds
-every network access in the suite — `pnpm install`, the four clones/downloads,
+every network access in the suite — `pnpm install`, the four pinned clones, the `parser.ts` download,
 and `setup-corpus.mjs`'s fallback fetch of the pinned corpora commit. Nothing
 downstream reaches the network: the formatters are installed, the corpora are
 local, and the version strings come from binaries and manifests already on disk.
@@ -454,6 +462,25 @@ list: without one the four tsv scenarios abort, but upstream's three still run,
 so `init.sh` warns and `update-readme` is the one that refuses. On success it
 prints the `node …` forms of the run commands ahead of the `pnpm run` ones, for
 the reason in the next paragraph.
+
+**Every corpus is pinned.** The single file is a tagged download
+(`v5.9.2`), `bench-svelte` reads the fuzdev/corpora snapshot at the pin in
+`corpora-pin.mjs`, and the four clones — outline twice, storybook, continue —
+are fetched at the commits in `shared/corpus-pins.mjs`. `init.sh` clones each
+through `shared/clone-corpus.mjs` (a depth-1 fetch of the commit itself, so it
+costs what a shallow clone did), and `missingBenchSetup` lists a checkout that
+exists but sits at another commit, so a run refuses it up front rather than
+publishing numbers for a corpus other than the one named. That also holds the two
+outline checkouts to one commit. The workflows can't read the pin file before
+checking anything out, so their checkout steps repeat the SHAs as `ref:`; one
+left behind by a bump fails the workflow's `./init.sh` step on the same check.
+Each scenario still prints and records its `Corpus:` line (`describeCorpus`, via
+`printCorpus`) — the commit and date, or for the downloaded file its size and
+content hash — which is how a published run says which pin it ran at.
+
+Moving a pin changes the corpus, so the numbers after it aren't comparable with
+the ones before: bump the commit in `corpus-pins.mjs` and both workflows, `rm -rf`
+that `data/`, rerun `./init.sh`, and regenerate the README as a whole.
 
 **The `pnpm run` wrapper is the exception, and it's the launcher, not the suite.**
 `package.json` carries upstream's `packageManager` pin, and pnpm's
@@ -742,19 +769,6 @@ Candidates:
   ordinary check run, so a failure that formats nothing still reads as clean there.
   A file-count assertion ("the tool reported looking at ≥ 1 files") would cover all
   of them, at the cost of another per-tool matcher to keep alive.
-- **Pin the cloned corpora.** `init.sh` and both workflows clone
-  outline/storybook/continue at their default-branch HEAD, unpinned, so the corpus
-  drifts and a rerun months apart is not comparable — and outline is now cloned
-  twice, which can land two different commits. `bench-large-single-file` already
-  pins (`v5.9.2`); the clones should too. `bench-svelte` is the exception:
-  `setup-corpus.mjs` reads its seven sources from the fuzdev/corpora snapshot at the
-  commit and `collections/` tree id pinned in `corpora-pin.mjs`, so that corpus
-  reproduces from one SHA, its snapshot commit is deterministic over the bytes,
-  and `bench.mjs` refuses a `data/` built at any other pin (see the rsvelte-fmt
-  section). Until the rest are pinned, each scenario at least prints and records a
-  `Corpus:` line (`describeCorpus`, via `printCorpus`) naming the commit and date it
-  ran against — or, for the single downloaded file, its size and content hash — so
-  two runs can be told apart instead of silently differing.
 
 When adding these, keep the apples-to-apples discipline: scope _every_ formatter
 in a tsv-inclusive run to the same file set (the three-way `prettierignore` /

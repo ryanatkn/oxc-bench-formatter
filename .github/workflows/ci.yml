@@ -33,6 +33,7 @@ jobs:
           persist-credentials: false
           repository: outline/outline
           path: bench-js-no-embedded/data
+          ref: 8cf997c5ce0ce99721f44804f58d44c05ba8b0fc
       # bench-ts-only benches the same repo scoped to its non-JSX subset, in its
       # own checkout so each scenario resets its tree independently. tsv comes
       # from npm (@fuzdev/tsv's platform package, installed with the rest), so
@@ -43,15 +44,18 @@ jobs:
           persist-credentials: false
           repository: outline/outline
           path: bench-ts-only/data
+          ref: 8cf997c5ce0ce99721f44804f58d44c05ba8b0fc
       # storybookjs/storybook's default branch contains gitlinks under .external/
       # without a .gitmodules file, which makes actions/checkout's post-job
-      # submodule cleanup fail. Use a plain shallow clone instead.
-      - run: git clone --depth=1 https://github.com/storybookjs/storybook.git bench-mixed-embedded/data
+      # submodule cleanup fail. Use a plain shallow clone instead — init.sh's
+      # own, which reads the pin from shared/corpus-pins.mjs.
+      - run: node ./shared/clone-corpus.mjs bench-mixed-embedded/data
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           repository: continuedev/continue
           path: bench-full-features/data
+          ref: d0a3c0b626b5bebc3bef4742eec05a0242be0bab
 
       - uses: voidzero-dev/setup-vp@49c3e4e92c52e7f8392712a9267bbe71c5ab30e5 # v1.19.0
         with:

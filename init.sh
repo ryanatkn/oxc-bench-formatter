@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # One-time setup, and the only part of this suite that touches the network:
-# dependencies, the four cloned/downloaded corpora, and the pinned Svelte
-# snapshot. The benchmark scripts never call this — they stop and point here when
+# dependencies, the cloned and downloaded corpora (each at its pin), and the
+# pinned Svelte snapshot. The benchmark scripts never call this — they stop and point here when
 # something is missing — so once this has run the machine can be taken offline
 # for the benchmarks themselves. Exits non-zero if a run still couldn't start.
 
@@ -13,7 +13,7 @@ pnpm install
 # Clone Outline repository if not exists
 if [ ! -d "bench-js-no-embedded/data" ]; then
 	echo "Cloning Outline repository..."
-	git clone --depth=1 https://github.com/outline/outline.git bench-js-no-embedded/data
+	node ./shared/clone-corpus.mjs bench-js-no-embedded/data
 else
 	echo "Outline repository already exists"
 fi
@@ -21,7 +21,7 @@ fi
 # Clone Storybook repository for mixed-embedded benchmark if not exists
 if [ ! -d "bench-mixed-embedded/data" ]; then
 	echo "Cloning Storybook repository for mixed-embedded benchmark..."
-	git clone --depth=1 https://github.com/storybookjs/storybook.git bench-mixed-embedded/data
+	node ./shared/clone-corpus.mjs bench-mixed-embedded/data
 else
 	echo "Storybook repository for mixed-embedded already exists"
 fi
@@ -29,7 +29,7 @@ fi
 # Clone Continue repository for full-features benchmark if not exists
 if [ ! -d "bench-full-features/data" ]; then
 	echo "Cloning Continue repository for full-features benchmark..."
-	git clone --depth=1 https://github.com/continuedev/continue.git bench-full-features/data
+	node ./shared/clone-corpus.mjs bench-full-features/data
 else
 	echo "Continue repository for full-features already exists"
 fi
@@ -98,7 +98,7 @@ fi
 # output.
 if [ ! -d "bench-ts-only/data" ]; then
 	echo "Cloning Outline repository for the ts-only benchmark..."
-	git clone --depth=1 https://github.com/outline/outline.git bench-ts-only/data
+	node ./shared/clone-corpus.mjs bench-ts-only/data
 else
 	echo "Outline repository for ts-only already exists"
 fi

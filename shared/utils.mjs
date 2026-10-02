@@ -15,6 +15,8 @@ import { tmpdir } from "os";
 import { basename, dirname, join, relative, resolve } from "path";
 import { fileURLToPath } from "url";
 
+import { unpinnedCorpora } from "./corpus-pins.mjs";
+
 const FORMATTER_NAMES = ["prettier", "prettier+oxc-parser", "biome", "oxfmt"];
 
 // ---
@@ -318,7 +320,7 @@ export function setupCwd(importMetaUrl) {
  * What a benchmark run reads off disk, and the one step that puts it there.
  *
  * Every network access in this suite lives in `./init.sh`: `pnpm install`, the
- * shallow clones of outline (twice), storybook and continue, the pinned
+ * pinned shallow clones of outline (twice), storybook and continue, the pinned
  * `parser.ts` download, and the fuzdev/corpora fetch `setup-corpus.mjs` falls
  * back to when there is no sibling checkout. Nothing downstream of it goes to
  * the network — the formatters are all installed, the corpora are all local, and
@@ -345,7 +347,10 @@ const REQUIRED_CORPORA = [
  *
  * The one list both ends of setup read: `assertBenchReady` refuses a run on it,
  * and `init.sh` closes on it, so "Setup complete" can't be printed over a clone
- * that failed or a corpus the run is about to refuse. hyperfine is on it because
+ * that failed or a corpus the run is about to refuse. A cloned corpus that is
+ * there but not at its pinned commit (`corpus-pins.mjs`) is on it too: the run
+ * would start, and publish numbers for a corpus other than the one named.
+ * hyperfine is on it because
  * every scenario needs it — GNU time is not, since without it only the memory
  * pass is skipped.
  */
@@ -357,6 +362,7 @@ export function missingBenchSetup(projectRoot = ".") {
   for (const [path, what] of REQUIRED_CORPORA) {
     if (!existsSync(join(projectRoot, path))) missing.push(`${path} — ${what}`);
   }
+  missing.push(...unpinnedCorpora(projectRoot));
   if (spawnSync("hyperfine", ["--version"]).error) {
     missing.push(
       "hyperfine — not on PATH, and not something init.sh installs (apt/brew install hyperfine)",
@@ -564,11 +570,11 @@ export function createFormatters(projectRoot, configDir) {
 /**
  * Where a corpus came from, printed and recorded with each scenario's target.
  *
- * The cloned corpora track their upstream default branches, so the same scenario
- * run months apart can be a different repository — a difference that otherwise
- * leaves no trace in the published numbers. A commit and date (or, for the single
- * downloaded file, its size and content hash) makes a rerun comparable, or
- * visibly not.
+ * The cloned corpora are pinned (`corpus-pins.mjs`), but a pin moves, and the
+ * same scenario run either side of a bump is a different repository — a
+ * difference that otherwise leaves no trace in the published numbers. A commit
+ * and date (or, for the single downloaded file, its size and content hash) makes
+ * a rerun comparable, or visibly not.
  */
 export function describeCorpus(target) {
   try {
