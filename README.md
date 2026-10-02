@@ -108,11 +108,12 @@ floor every npm-bin row pays).
 ## Versions
 
 - **Prettier**: 3.9.6
+- **@prettier/plugin-oxc**: 0.2.2
 - **Biome**: 2.5.13
 - **Oxfmt**: 0.68.0
 - **rsvelte-fmt**: 0.7.23
-- **tsv**: 0.4.1 (@fuzdev/tsv-linux-x64-gnu)
-- **tsv-wasm**: 0.4.1
+- **tsv**: 0.5.0 (@fuzdev/tsv-linux-x64-gnu)
+- **tsv-wasm**: 0.5.0
 - **Node**: 24.14.1
 
 _Measured on: AMD Ryzen 5 PRO 7530U with Radeon Graphics · 12 threads · linux x86_64 — the ratios below depend on the core count._
@@ -141,44 +142,44 @@ Preflight (per-formatter parse check):
   tsv: clean (1 file, 1 would change)
   → all formatters accept the whole corpus; nothing excluded
 Benchmark 1: prettier
-  Time (mean ± σ):      1.620 s ±  0.026 s    [User: 1.555 s, System: 0.865 s]
-  Range (min … max):    1.557 s …  1.660 s    20 runs
+  Time (mean ± σ):      1.618 s ±  0.028 s    [User: 1.530 s, System: 0.895 s]
+  Range (min … max):    1.575 s …  1.670 s    20 runs
 
 Benchmark 2: prettier+oxc-parser
-  Time (mean ± σ):     976.7 ms ±   8.7 ms    [User: 887.2 ms, System: 446.0 ms]
-  Range (min … max):   962.3 ms … 1003.4 ms    20 runs
+  Time (mean ± σ):     976.9 ms ±  12.9 ms    [User: 879.3 ms, System: 454.2 ms]
+  Range (min … max):   939.7 ms … 989.4 ms    20 runs
 
 Benchmark 3: biome
-  Time (mean ± σ):     107.9 ms ±   1.3 ms    [User: 81.1 ms, System: 34.2 ms]
-  Range (min … max):   105.6 ms … 110.3 ms    20 runs
+  Time (mean ± σ):     108.2 ms ±   1.4 ms    [User: 80.3 ms, System: 34.6 ms]
+  Range (min … max):   105.3 ms … 112.2 ms    20 runs
 
 Benchmark 4: oxfmt
-  Time (mean ± σ):      61.7 ms ±   1.7 ms    [User: 46.1 ms, System: 48.4 ms]
-  Range (min … max):    60.1 ms …  66.6 ms    20 runs
+  Time (mean ± σ):      62.0 ms ±   2.0 ms    [User: 42.3 ms, System: 53.0 ms]
+  Range (min … max):    59.2 ms …  66.3 ms    20 runs
 
 Benchmark 5: tsv-npm
-  Time (mean ± σ):      46.6 ms ±   0.6 ms    [User: 30.0 ms, System: 19.0 ms]
-  Range (min … max):    45.7 ms …  47.9 ms    20 runs
+  Time (mean ± σ):      46.5 ms ±   0.9 ms    [User: 29.5 ms, System: 19.3 ms]
+  Range (min … max):    44.8 ms …  47.8 ms    20 runs
 
 Benchmark 6: tsv
-  Time (mean ± σ):      16.8 ms ±   0.5 ms    [User: 10.0 ms, System: 6.8 ms]
-  Range (min … max):    16.0 ms …  18.7 ms    20 runs
+  Time (mean ± σ):      16.4 ms ±   0.5 ms    [User: 8.4 ms, System: 7.9 ms]
+  Range (min … max):    15.5 ms …  17.3 ms    20 runs
 
 Summary
   tsv ran
-    2.78 ± 0.10 times faster than tsv-npm
-    3.68 ± 0.16 times faster than oxfmt
-    6.44 ± 0.22 times faster than biome
-   58.26 ± 1.97 times faster than prettier+oxc-parser
-   96.66 ± 3.53 times faster than prettier
+    2.84 ± 0.09 times faster than tsv-npm
+    3.78 ± 0.16 times faster than oxfmt
+    6.60 ± 0.20 times faster than biome
+   59.60 ± 1.84 times faster than prettier+oxc-parser
+   98.72 ± 3.23 times faster than prettier
 
 Memory Usage:
-  prettier: 306.1 MB (min: 292.7 MB, max: 327.1 MB, 22.79 ± 0.61 times more than tsv)
-  prettier+oxc-parser: 196.8 MB (min: 193.4 MB, max: 198.4 MB, 14.65 ± 0.16 times more than tsv)
-  biome: 94.5 MB (min: 92.9 MB, max: 97.2 MB, 7.04 ± 0.10 times more than tsv)
-  oxfmt: 114.0 MB (min: 113.8 MB, max: 114.4 MB, 8.49 ± 0.07 times more than tsv)
-  tsv-npm: 49.3 MB (min: 47.3 MB, max: 49.6 MB, 3.67 ± 0.05 times more than tsv)
-  tsv: 13.4 MB (min: 13.2 MB, max: 13.6 MB)
+  prettier: 306.2 MB (min: 292.3 MB, max: 321.4 MB, 22.82 ± 0.66 times more than tsv)
+  prettier+oxc-parser: 197.0 MB (min: 195.6 MB, max: 197.9 MB, 14.68 ± 0.13 times more than tsv)
+  biome: 95.9 MB (min: 92.9 MB, max: 99.3 MB, 7.15 ± 0.16 times more than tsv)
+  oxfmt: 114.1 MB (min: 113.8 MB, max: 114.2 MB, 8.50 ± 0.07 times more than tsv)
+  tsv-npm: 49.5 MB (min: 49.4 MB, max: 49.6 MB, 3.69 ± 0.03 times more than tsv)
+  tsv: 13.4 MB (min: 13.1 MB, max: 13.6 MB)
 
 Large single file benchmark complete!
 
@@ -193,32 +194,32 @@ Corpus: 8cf997c 2026-07-14
 - Git reset before each run
 
 Benchmark 1: prettier
-  Time (mean ± σ):     11.877 s ±  0.221 s    [User: 19.946 s, System: 1.438 s]
-  Range (min … max):   11.511 s … 12.202 s    10 runs
+  Time (mean ± σ):     11.935 s ±  0.188 s    [User: 20.237 s, System: 1.340 s]
+  Range (min … max):   11.624 s … 12.184 s    10 runs
 
 Benchmark 2: prettier+oxc-parser
-  Time (mean ± σ):      9.650 s ±  0.222 s    [User: 12.603 s, System: 0.726 s]
-  Range (min … max):    9.263 s …  9.911 s    10 runs
+  Time (mean ± σ):      9.494 s ±  0.095 s    [User: 12.310 s, System: 0.714 s]
+  Range (min … max):    9.374 s …  9.627 s    10 runs
 
 Benchmark 3: biome
-  Time (mean ± σ):     412.3 ms ±   1.0 ms    [User: 3159.0 ms, System: 294.6 ms]
-  Range (min … max):   411.1 ms … 414.2 ms    10 runs
+  Time (mean ± σ):     414.2 ms ±   2.4 ms    [User: 3166.2 ms, System: 286.6 ms]
+  Range (min … max):   409.7 ms … 418.1 ms    10 runs
 
 Benchmark 4: oxfmt
-  Time (mean ± σ):     140.8 ms ±   1.8 ms    [User: 745.3 ms, System: 321.9 ms]
-  Range (min … max):   138.5 ms … 144.5 ms    10 runs
+  Time (mean ± σ):     141.4 ms ±   2.8 ms    [User: 760.4 ms, System: 296.6 ms]
+  Range (min … max):   136.4 ms … 146.1 ms    10 runs
 
 Summary
   oxfmt ran
-    2.93 ± 0.04 times faster than biome
-   68.54 ± 1.80 times faster than prettier+oxc-parser
-   84.37 ± 1.89 times faster than prettier
+    2.93 ± 0.06 times faster than biome
+   67.16 ± 1.49 times faster than prettier+oxc-parser
+   84.43 ± 2.14 times faster than prettier
 
 Memory Usage:
-  prettier: 481.4 MB (min: 381.4 MB, max: 673.9 MB, 2.07 ± 0.37 times more than oxfmt)
-  prettier+oxc-parser: 327.7 MB (min: 312.6 MB, max: 353.1 MB, 1.41 ± 0.07 times more than oxfmt)
-  biome: 182.4 MB (min: 179.4 MB, max: 185.3 MB, 0.79 ± 0.02 times more than oxfmt)
-  oxfmt: 232.2 MB (min: 223.9 MB, max: 239.4 MB)
+  prettier: 471.4 MB (min: 399.8 MB, max: 602.2 MB, 2.04 ± 0.29 times more than oxfmt)
+  prettier+oxc-parser: 330.9 MB (min: 309.0 MB, max: 385.4 MB, 1.43 ± 0.11 times more than oxfmt)
+  biome: 182.7 MB (min: 181.1 MB, max: 185.9 MB, 0.79 ± 0.02 times more than oxfmt)
+  oxfmt: 231.0 MB (min: 223.2 MB, max: 239.3 MB)
 
 JS/TS (no embedded) benchmark complete!
 
@@ -233,20 +234,20 @@ Corpus: 5073688 2026-07-15
 - Git reset before each run
 
 Benchmark 1: prettier+oxc-parser
-  Time (mean ± σ):     51.878 s ±  0.492 s    [User: 57.801 s, System: 6.831 s]
-  Range (min … max):   51.454 s … 52.417 s    3 runs
+  Time (mean ± σ):     52.011 s ±  0.250 s    [User: 57.472 s, System: 6.994 s]
+  Range (min … max):   51.760 s … 52.260 s    3 runs
 
 Benchmark 2: oxfmt
-  Time (mean ± σ):      8.172 s ±  0.121 s    [User: 84.613 s, System: 6.102 s]
-  Range (min … max):    8.074 s …  8.308 s    3 runs
+  Time (mean ± σ):      8.160 s ±  0.276 s    [User: 84.463 s, System: 6.097 s]
+  Range (min … max):    7.971 s …  8.476 s    3 runs
 
 Summary
   oxfmt ran
-    6.35 ± 0.11 times faster than prettier+oxc-parser
+    6.37 ± 0.22 times faster than prettier+oxc-parser
 
 Memory Usage:
-  prettier+oxc-parser: 1663.2 MB (min: 1558.7 MB, max: 1786.0 MB, 3.96 ± 0.32 times more than oxfmt)
-  oxfmt: 420.0 MB (min: 400.9 MB, max: 434.6 MB)
+  prettier+oxc-parser: 1675.2 MB (min: 1575.3 MB, max: 1757.2 MB, 3.87 ± 0.57 times more than oxfmt)
+  oxfmt: 432.8 MB (min: 398.5 MB, max: 500.8 MB)
 
 Mixed (embedded) benchmark complete!
 
@@ -261,20 +262,20 @@ Corpus: d0a3c0b 2026-06-18
 - Git reset before each run
 
 Benchmark 1: prettier+oxc-parser
-  Time (mean ± σ):     25.673 s ±  0.270 s    [User: 33.940 s, System: 2.205 s]
-  Range (min … max):   25.465 s … 25.978 s    3 runs
+  Time (mean ± σ):     25.811 s ±  0.160 s    [User: 34.193 s, System: 2.140 s]
+  Range (min … max):   25.631 s … 25.939 s    3 runs
 
 Benchmark 2: oxfmt
-  Time (mean ± σ):      3.192 s ±  0.163 s    [User: 30.073 s, System: 3.079 s]
-  Range (min … max):    3.064 s …  3.376 s    3 runs
+  Time (mean ± σ):      3.260 s ±  0.016 s    [User: 29.869 s, System: 3.082 s]
+  Range (min … max):    3.245 s …  3.277 s    3 runs
 
 Summary
   oxfmt ran
-    8.04 ± 0.42 times faster than prettier+oxc-parser
+    7.92 ± 0.06 times faster than prettier+oxc-parser
 
 Memory Usage:
-  prettier+oxc-parser: 718.7 MB (min: 652.9 MB, max: 754.4 MB, 2.41 ± 0.21 times more than oxfmt)
-  oxfmt: 298.1 MB (min: 291.1 MB, max: 309.6 MB)
+  prettier+oxc-parser: 667.4 MB (min: 658.9 MB, max: 679.6 MB, 2.10 ± 0.17 times more than oxfmt)
+  oxfmt: 318.2 MB (min: 297.2 MB, max: 347.2 MB)
 
 Full features benchmark complete!
 
@@ -300,44 +301,44 @@ Preflight (per-formatter parse check):
   tsv: clean (1648 files, 1644 would change)
   → all formatters accept the whole corpus; nothing excluded
 Benchmark 1: prettier
-  Time (mean ± σ):      8.325 s ±  0.072 s    [User: 13.874 s, System: 0.907 s]
-  Range (min … max):    8.228 s …  8.431 s    10 runs
+  Time (mean ± σ):      8.345 s ±  0.116 s    [User: 13.900 s, System: 0.916 s]
+  Range (min … max):    8.211 s …  8.551 s    10 runs
 
 Benchmark 2: prettier+oxc-parser
-  Time (mean ± σ):      6.864 s ±  0.087 s    [User: 8.825 s, System: 0.540 s]
-  Range (min … max):    6.712 s …  6.985 s    10 runs
+  Time (mean ± σ):      6.896 s ±  0.087 s    [User: 8.823 s, System: 0.561 s]
+  Range (min … max):    6.758 s …  7.009 s    10 runs
 
 Benchmark 3: biome
-  Time (mean ± σ):     299.9 ms ±   1.4 ms    [User: 2173.5 ms, System: 226.4 ms]
-  Range (min … max):   298.2 ms … 302.5 ms    10 runs
+  Time (mean ± σ):     302.7 ms ±   5.1 ms    [User: 2174.5 ms, System: 204.7 ms]
+  Range (min … max):   299.0 ms … 316.5 ms    10 runs
 
 Benchmark 4: oxfmt
-  Time (mean ± σ):     116.0 ms ±   2.5 ms    [User: 530.1 ms, System: 274.0 ms]
-  Range (min … max):   112.6 ms … 119.8 ms    10 runs
+  Time (mean ± σ):     115.4 ms ±   2.9 ms    [User: 521.1 ms, System: 276.9 ms]
+  Range (min … max):   110.1 ms … 120.5 ms    10 runs
 
 Benchmark 5: tsv-npm
-  Time (mean ± σ):      76.0 ms ±   0.7 ms    [User: 289.7 ms, System: 130.2 ms]
-  Range (min … max):    75.3 ms …  77.6 ms    10 runs
+  Time (mean ± σ):      74.8 ms ±   1.0 ms    [User: 281.2 ms, System: 125.6 ms]
+  Range (min … max):    73.4 ms …  76.8 ms    10 runs
 
 Benchmark 6: tsv
-  Time (mean ± σ):      45.2 ms ±   0.3 ms    [User: 269.2 ms, System: 115.5 ms]
-  Range (min … max):    44.8 ms …  45.8 ms    10 runs
+  Time (mean ± σ):      43.6 ms ±   0.3 ms    [User: 252.8 ms, System: 119.2 ms]
+  Range (min … max):    43.3 ms …  44.1 ms    10 runs
 
 Summary
   tsv ran
-    1.68 ± 0.02 times faster than tsv-npm
-    2.57 ± 0.06 times faster than oxfmt
-    6.64 ± 0.05 times faster than biome
-  151.91 ± 2.16 times faster than prettier+oxc-parser
-  184.25 ± 1.98 times faster than prettier
+    1.72 ± 0.03 times faster than tsv-npm
+    2.65 ± 0.07 times faster than oxfmt
+    6.95 ± 0.13 times faster than biome
+  158.28 ± 2.29 times faster than prettier+oxc-parser
+  191.51 ± 2.97 times faster than prettier
 
 Memory Usage:
-  prettier: 478.3 MB (min: 397.1 MB, max: 535.2 MB, 23.13 ± 2.20 times more than tsv)
-  prettier+oxc-parser: 303.9 MB (min: 299.2 MB, max: 308.4 MB, 14.69 ± 0.49 times more than tsv)
-  biome: 144.8 MB (min: 141.7 MB, max: 146.6 MB, 7.00 ± 0.24 times more than tsv)
-  oxfmt: 226.0 MB (min: 219.5 MB, max: 232.3 MB, 10.92 ± 0.39 times more than tsv)
-  tsv-npm: 49.6 MB (min: 49.3 MB, max: 49.9 MB, 2.40 ± 0.08 times more than tsv)
-  tsv: 20.7 MB (min: 19.7 MB, max: 21.7 MB)
+  prettier: 462.5 MB (min: 388.8 MB, max: 568.1 MB, 22.52 ± 2.81 times more than tsv)
+  prettier+oxc-parser: 306.4 MB (min: 301.8 MB, max: 321.8 MB, 14.92 ± 0.36 times more than tsv)
+  biome: 146.0 MB (min: 142.2 MB, max: 149.1 MB, 7.11 ± 0.15 times more than tsv)
+  oxfmt: 227.0 MB (min: 221.6 MB, max: 236.7 MB, 11.05 ± 0.29 times more than tsv)
+  tsv-npm: 49.6 MB (min: 49.5 MB, max: 49.9 MB, 2.42 ± 0.04 times more than tsv)
+  tsv: 20.5 MB (min: 20.1 MB, max: 21.1 MB)
 
 TypeScript-only (non-JSX subset) benchmark complete!
 
@@ -359,26 +360,26 @@ Preflight (per-formatter parse check):
   tsv: clean (2226 files, 2041 would change)
   → all formatters accept the whole corpus; nothing excluded
 Benchmark 1: rsvelte-fmt
-  Time (mean ± σ):     189.1 ms ±  11.6 ms    [User: 833.7 ms, System: 705.8 ms]
-  Range (min … max):   176.0 ms … 212.9 ms    10 runs
+  Time (mean ± σ):     196.6 ms ±   6.5 ms    [User: 846.6 ms, System: 747.5 ms]
+  Range (min … max):   185.9 ms … 208.5 ms    10 runs
 
 Benchmark 2: tsv-npm
-  Time (mean ± σ):      71.7 ms ±   1.2 ms    [User: 244.3 ms, System: 143.4 ms]
-  Range (min … max):    70.5 ms …  74.2 ms    10 runs
+  Time (mean ± σ):      70.3 ms ±   1.1 ms    [User: 248.0 ms, System: 125.4 ms]
+  Range (min … max):    68.6 ms …  71.4 ms    10 runs
 
 Benchmark 3: tsv
-  Time (mean ± σ):      41.1 ms ±   0.4 ms    [User: 226.6 ms, System: 126.8 ms]
-  Range (min … max):    40.6 ms …  42.2 ms    10 runs
+  Time (mean ± σ):      39.4 ms ±   0.3 ms    [User: 211.3 ms, System: 128.8 ms]
+  Range (min … max):    39.0 ms …  39.9 ms    10 runs
 
 Summary
   tsv ran
-    1.75 ± 0.04 times faster than tsv-npm
-    4.61 ± 0.29 times faster than rsvelte-fmt
+    1.78 ± 0.03 times faster than tsv-npm
+    4.99 ± 0.17 times faster than rsvelte-fmt
 
 Memory Usage:
-  rsvelte-fmt: 134.0 MB (min: 121.3 MB, max: 147.3 MB, 10.28 ± 0.67 times more than tsv)
-  tsv-npm: 49.6 MB (min: 49.3 MB, max: 49.8 MB, 3.80 ± 0.11 times more than tsv)
-  tsv: 13.0 MB (min: 12.5 MB, max: 13.7 MB)
+  rsvelte-fmt: 139.3 MB (min: 131.3 MB, max: 145.4 MB, 11.05 ± 0.41 times more than tsv)
+  tsv-npm: 49.6 MB (min: 49.3 MB, max: 49.7 MB, 3.93 ± 0.07 times more than tsv)
+  tsv: 12.6 MB (min: 12.2 MB, max: 12.9 MB)
 
 Svelte benchmark complete!
 
@@ -399,26 +400,26 @@ Preflight (per-formatter parse check):
   tsv: clean (1 file, 1 would change)
   → all formatters accept the whole corpus; nothing excluded
 Benchmark 1: tsv-wasm
-  Time (mean ± σ):     152.0 ms ±   3.3 ms    [User: 321.8 ms, System: 56.4 ms]
-  Range (min … max):   146.9 ms … 160.3 ms    20 runs
+  Time (mean ± σ):     155.7 ms ±   4.9 ms    [User: 322.1 ms, System: 57.2 ms]
+  Range (min … max):   149.4 ms … 166.5 ms    20 runs
 
 Benchmark 2: tsv-npm
-  Time (mean ± σ):      47.5 ms ±   1.1 ms    [User: 32.8 ms, System: 17.0 ms]
-  Range (min … max):    45.9 ms …  50.1 ms    20 runs
+  Time (mean ± σ):      47.3 ms ±   0.6 ms    [User: 33.0 ms, System: 16.6 ms]
+  Range (min … max):    46.3 ms …  48.4 ms    20 runs
 
 Benchmark 3: tsv
-  Time (mean ± σ):      16.9 ms ±   0.2 ms    [User: 11.2 ms, System: 5.7 ms]
-  Range (min … max):    16.5 ms …  17.5 ms    20 runs
+  Time (mean ± σ):      16.5 ms ±   0.3 ms    [User: 11.5 ms, System: 5.0 ms]
+  Range (min … max):    16.1 ms …  17.0 ms    20 runs
 
 Summary
   tsv ran
-    2.81 ± 0.08 times faster than tsv-npm
-    8.99 ± 0.24 times faster than tsv-wasm
+    2.86 ± 0.06 times faster than tsv-npm
+    9.41 ± 0.34 times faster than tsv-wasm
 
 Memory Usage:
-  tsv-wasm: 116.5 MB (min: 112.7 MB, max: 119.8 MB, 8.72 ± 0.18 times more than tsv)
-  tsv-npm: 49.6 MB (min: 49.3 MB, max: 49.8 MB, 3.71 ± 0.03 times more than tsv)
-  tsv: 13.4 MB (min: 13.1 MB, max: 13.6 MB)
+  tsv-wasm: 116.7 MB (min: 110.3 MB, max: 122.9 MB, 8.68 ± 0.26 times more than tsv)
+  tsv-npm: 49.6 MB (min: 49.2 MB, max: 49.7 MB, 3.69 ± 0.03 times more than tsv)
+  tsv: 13.4 MB (min: 13.3 MB, max: 13.7 MB)
 
 tsv delivery benchmark complete!
 
