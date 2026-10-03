@@ -806,11 +806,16 @@ formatters, on `.svelte` files only.
   trees tsv's own bench corpus uses (`svelte` is absent on purpose:
   `packages/svelte/src` is the compiler, zero `.svelte` files) — plus five Svelte
   libraries: layerchart, svelte-ux, flowbite-svelte, svelte-maplibre, layercake.
-  The snapshot already leaves each upstream's test fixtures behind, so the only
-  filter here is the extension. 2,226 files / ~4.1MB at the current pin, all
+  The snapshot already leaves each upstream's test fixtures behind, so the
+  filters here are the extension and `corpora-pin.mjs`'s `SUBPATHS`, which narrows
+  flowbite-svelte to `src/lib`: its `src/routes` docs site is mostly near-duplicate
+  docs-example snippets in one house style, and whole it was over half the files,
+  drowning out the other sources' styles. The selection is recorded in the
+  snapshot's pin line beside the commit and tree, so changing it forces a rebuild.
+  1,113 files / ~2.8MB at the current pin, no source over a third of them, all
   third-party and prettier-shaped — neither benched formatter is measured on code
-  it already shaped, and both would rewrite ~92% of the files, so write volume is
-  symmetric too. That fairness premise is checked, not assumed: the manifest names
+  it already shaped, and both would rewrite over 80% of the files, so write volume
+  is symmetric too. That fairness premise is checked, not assumed: the manifest names
   who shaped each collection (`shaped_by`), and the build refuses one shaped by a
   formatter this scenario benches.
 - **Where the bytes come from, and what is pinned.** The script never reads a
@@ -830,7 +835,7 @@ formatters, on `.svelte` files only.
   differently (tsv is config-free and gitignore-aware; rsvelte-fmt walks
   `.svelte` itself and hands the rest of a directory to oxfmt, which would pick
   up `.json`/`.md`/etc), so a tree containing only the corpus files is the one
-  way to pin both to the same set — both self-report the same count (2,226 at the
+  way to pin both to the same set — both self-report the same count (1,113 at the
   current pin), which preflight now asserts every run. The
   `git init` makes `data/` its own git root (sidestepping the outer
   `.gitignore` trap described above) and provides the reset-per-run baseline;

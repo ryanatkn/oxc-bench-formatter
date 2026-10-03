@@ -16,11 +16,12 @@ import {
   setupCwd,
 } from "../shared/utils.mjs";
 import {
-  COLLECTIONS,
-  CORPORA_COMMIT,
-  CORPORA_TREE,
+  describeCollections,
   describePin,
+  describeSnapshotPin,
+  isCurrentPin,
   readSnapshotPin,
+  SELECTION,
 } from "./corpora-pin.mjs";
 
 // Same counts as `bench-ts-only`. This scenario ran 2 × 5 for a while on the
@@ -58,11 +59,9 @@ async function main() {
   // what these numbers claim to describe, and setup-corpus only ever builds a
   // MISSING ./data, so a bumped pin over an old snapshot would be timed as-is.
   const built = readSnapshotPin(dataDir);
-  if (built?.commit !== CORPORA_COMMIT || built.tree !== CORPORA_TREE) {
+  if (!isCurrentPin(built)) {
     console.error(
-      `bench-svelte corpus was built from ${
-        built ? describePin(built.commit, built.tree) : "an older setup-corpus (no pin recorded)"
-      }, but corpora-pin.mjs pins ${describePin()}. Rebuild it: rm -rf bench-svelte/data && node ./bench-svelte/setup-corpus.mjs`,
+      `bench-svelte corpus was built from ${describeSnapshotPin(built)}, but corpora-pin.mjs pins ${describePin()}, select ${SELECTION}. Rebuild it: rm -rf bench-svelte/data && node ./bench-svelte/setup-corpus.mjs`,
     );
     process.exit(1);
   }
@@ -74,7 +73,7 @@ async function main() {
   // whatever the previous run left formatted.
   execSync(prepareCmd, { stdio: "ignore" });
 
-  printTarget(`third-party .svelte corpus (${COLLECTIONS.join(", ")})`);
+  printTarget(`third-party .svelte corpus (${describeCollections()})`);
   // The pin names the bytes; the snapshot commit is deterministic over them
   // (see setup-corpus.mjs), so its hash is comparable between machines too.
   printCorpus(`${describePin()}, snapshot ${describeCorpus(dataDir)}`);

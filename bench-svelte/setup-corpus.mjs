@@ -33,7 +33,9 @@
 // Every collection is checked to be shaped by a formatter that isn't benched
 // here (the manifest's `shaped_by`): a formatter measured on code it already
 // shaped measures its no-op path. The snapshot already leaves each upstream's
-// test fixtures behind, so the only filter left here is the extension.
+// test fixtures behind, so the filters left here are the extension and the
+// per-collection SUBPATHS (corpora-pin.mjs), which keep one source from
+// dominating the mix.
 //
 // Idempotent: exits early if ./data exists at the current pin, and refuses to
 // run over a ./data built at an older one. Delete ./data to regenerate. The
@@ -52,8 +54,12 @@ import {
   CORPORA_TREE,
   CORPORA_URL,
   EXPECTED_FILES,
+  SELECTION,
+  SUBPATHS,
   describePin,
+  describeSnapshotPin,
   formatPinLine,
+  isCurrentPin,
   readSnapshotPin,
 } from "./corpora-pin.mjs";
 
@@ -136,16 +142,14 @@ function resolveCorporaRepo() {
 function main() {
   if (existsSync(dataDir)) {
     const built = readSnapshotPin(dataDir);
-    if (built?.commit === CORPORA_COMMIT && built.tree === CORPORA_TREE) {
+    if (isCurrentPin(built)) {
       console.log(
         `bench-svelte corpus already exists at ${describePin()} (delete ./data to regenerate)`,
       );
       return;
     }
     fail(
-      `bench-svelte corpus exists but was built from ${
-        built ? describePin(built.commit, built.tree) : "an older setup-corpus (no pin recorded)"
-      }; the pin is now ${describePin()}. Delete ./data and rerun to rebuild it.`,
+      `bench-svelte corpus exists but was built from ${describeSnapshotPin(built)}; the pin is now ${describePin()}, select ${SELECTION}. Delete ./data and rerun to rebuild it.`,
     );
   }
 
@@ -191,14 +195,23 @@ function main() {
       );
     }
     corporaGit(name, ["read-tree", `${CORPORA_COMMIT}:collections/${name}`]);
+    const subpaths = SUBPATHS[name];
     const paths = corporaGit(name, ["ls-files", "-z"])
       .split("\0")
       .filter((p) => p.endsWith(".svelte"))
+      .filter((p) => !subpaths || subpaths.some((s) => p.startsWith(`${s}/`)))
       .sort();
     if (paths.length === 0) {
       fail(`Collection ${name} contributed no .svelte files — did its layout change?`);
     }
-    return { name, collection, paths };
+    for (const s of subpaths ?? []) {
+      if (!paths.some((p) => p.startsWith(`${s}/`))) {
+        fail(
+          `Collection ${name}'s subpath ${s} contributed no .svelte files — did its layout change?`,
+        );
+      }
+    }
+    return { name, collection, subpaths: subpaths ?? collection.subpaths, paths };
   });
   const total = listed.reduce((sum, { paths }) => sum + paths.length, 0);
   if (total !== EXPECTED_FILES) {
@@ -210,7 +223,7 @@ function main() {
   console.log(`Copying .svelte files from ${corporaDir} at ${describePin()}...`);
   rmSync(stagingDir, { recursive: true, force: true });
   const provenance = [];
-  for (const { name, collection, paths } of listed) {
+  for (const { name, collection, subpaths, paths } of listed) {
     // Keep the upstream-relative layout: data/<name>/<subpath>/<relative>.
     const dest = resolve(stagingDir, name);
     mkdirSync(dest, { recursive: true });
@@ -218,7 +231,7 @@ function main() {
       input: paths.join("\0"),
     });
     provenance.push(
-      `${name}@${collection.commit.slice(0, 12)} ${collection.subpaths.join("+")} (${paths.length} files)`,
+      `${name}@${collection.commit.slice(0, 12)} ${subpaths.join("+")} (${paths.length} files)`,
     );
     console.log(`  ${provenance[provenance.length - 1]}`);
   }
@@ -243,7 +256,7 @@ function main() {
     "commit",
     "-q",
     "-m",
-    `svelte corpus: ${total} .svelte files\n\n${formatPinLine(CORPORA_COMMIT, CORPORA_TREE)}\n${provenance.join("\n")}`,
+    `svelte corpus: ${total} .svelte files\n\n${formatPinLine(CORPORA_COMMIT, CORPORA_TREE, SELECTION)}\n${provenance.join("\n")}`,
   ]);
   const snapshot = snapshotGit(["rev-parse", "--short=12", "HEAD"]).trim();
   renameSync(stagingDir, dataDir);

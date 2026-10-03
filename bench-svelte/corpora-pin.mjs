@@ -12,7 +12,9 @@
 // Moving the corpus: set CORPORA_COMMIT to the new roll-up, CORPORA_TREE to
 // `git rev-parse <commit>:collections`, and EXPECTED_FILES to the count the
 // refused rebuild reports — a pin bump that changes the file count has to say so here,
-// where review sees it, rather than only in ./data's commit message.
+// where review sees it, rather than only in ./data's commit message. Narrowing a
+// collection (SUBPATHS) moves the bytes without moving either id, so the snapshot
+// records the selection beside them and a change to it forces a rebuild too.
 
 import { execFileSync } from "child_process";
 
@@ -34,20 +36,39 @@ export const COLLECTIONS = [
   "layercake",
 ];
 
-// .svelte files across those collections at the pinned tree.
-export const EXPECTED_FILES = 2226;
+// Collections narrowed to some of their subpaths (relative to the collection's
+// root); every other one contributes all its .svelte files. corpora vendors as
+// much real code as it can, for tsv's correctness sweeps; choosing a mix that no
+// one source dominates is this consumer's job.
+export const SUBPATHS = {
+  // Its library only. Its src/routes is the docs site, mostly near-duplicate
+  // docs-example snippets in the library's one house style: whole, the collection
+  // was over half the corpus's files and drowned out the other sources' styles.
+  "flowbite-svelte": ["src/lib"],
+};
+
+// SUBPATHS as one token, recorded in the snapshot's pin line.
+export const SELECTION =
+  Object.entries(SUBPATHS)
+    .map(([name, subpaths]) => `${name}:${subpaths.join("+")}`)
+    .sort()
+    .join(",") || "all";
+
+// .svelte files across those collections at the pinned tree, after SUBPATHS.
+export const EXPECTED_FILES = 1113;
 
 // What the snapshot's commit message records, and the line the pin is read back
-// from. Kept as one regex so writer and reader can't drift.
-const PIN_LINE = /^fuzdev\/corpora@([0-9a-f]{40}) collections ([0-9a-f]{40})$/m;
+// from. Kept as one regex so writer and reader can't drift. The selection is
+// optional so a snapshot from before SUBPATHS reads back as one with none.
+const PIN_LINE = /^fuzdev\/corpora@([0-9a-f]{40}) collections ([0-9a-f]{40})(?: select (\S+))?$/m;
 
-export function formatPinLine(commit, tree) {
-  return `fuzdev/corpora@${commit} collections ${tree}`;
+export function formatPinLine(commit, tree, selection) {
+  return `fuzdev/corpora@${commit} collections ${tree} select ${selection}`;
 }
 
 /**
- * The corpora commit and tree a ./data snapshot was built from, read from its
- * commit message — or null when it isn't a git repo or predates the pin line.
+ * The corpora commit, tree, and selection a ./data snapshot was built from, read
+ * from its commit message — or null when it isn't a git repo or predates the pin line.
  */
 export function readSnapshotPin(dataDir) {
   let message;
@@ -60,9 +81,30 @@ export function readSnapshotPin(dataDir) {
     return null;
   }
   const match = PIN_LINE.exec(message);
-  return match ? { commit: match[1], tree: match[2] } : null;
+  return match ? { commit: match[1], tree: match[2], selection: match[3] ?? "all" } : null;
+}
+
+/** Whether a snapshot pin (from `readSnapshotPin`) is the one this file names. */
+export function isCurrentPin(built) {
+  return (
+    built?.commit === CORPORA_COMMIT && built.tree === CORPORA_TREE && built.selection === SELECTION
+  );
 }
 
 export function describePin(commit = CORPORA_COMMIT, tree = CORPORA_TREE) {
   return `fuzdev/corpora@${commit.slice(0, 12)} (collections tree ${tree.slice(0, 12)})`;
+}
+
+/** A snapshot pin with its selection, for the messages that refuse a stale one. */
+export function describeSnapshotPin(built) {
+  return built
+    ? `${describePin(built.commit, built.tree)}, select ${built.selection}`
+    : "an older setup-corpus (no pin recorded)";
+}
+
+/** The collections as the scenario's Target line names them, narrowed ones with their subpaths. */
+export function describeCollections() {
+  return COLLECTIONS.map((name) =>
+    SUBPATHS[name] ? `${name} ${SUBPATHS[name].join("+")}` : name,
+  ).join(", ");
 }
