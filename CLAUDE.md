@@ -812,7 +812,7 @@ formatters, on `.svelte` files only.
   docs-example snippets in one house style, and whole it was over half the files,
   drowning out the other sources' styles. The selection is recorded in the
   snapshot's pin line beside the commit and tree, so changing it forces a rebuild.
-  1,113 files / ~2.8MB at the current pin, no source over a third of them, all
+  1,091 files / ~2.8MB at the current pin, no source over a third of them, all
   third-party and prettier-shaped — neither benched formatter is measured on code
   it already shaped, and both would rewrite over 80% of the files, so write volume
   is symmetric too. That fairness premise is checked, not assumed: the manifest names
@@ -835,7 +835,7 @@ formatters, on `.svelte` files only.
   differently (tsv is config-free and gitignore-aware; rsvelte-fmt walks
   `.svelte` itself and hands the rest of a directory to oxfmt, which would pick
   up `.json`/`.md`/etc), so a tree containing only the corpus files is the one
-  way to pin both to the same set — both self-report the same count (1,113 at the
+  way to pin both to the same set — both self-report the same count (1,091 at the
   current pin), which preflight now asserts every run. The
   `git init` makes `data/` its own git root (sidestepping the outer
   `.gitignore` trap described above) and provides the reset-per-run baseline;
