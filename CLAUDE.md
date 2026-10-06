@@ -706,7 +706,7 @@ lives:
   repo-root `.formatignore` re-includes exactly those two files, in the order
   tsv's own warning prescribes (un-ignore the directory, re-ignore its contents,
   un-ignore the file). Without it every tsv distribution reports `0 would
-change, 0 unchanged` on that corpus, which preflight's no-op check turns into
+  change, 0 unchanged` on that corpus, which preflight's no-op check turns into
   an abort rather than a 1 ms "win". All confirmed via `--list`.
 - **Version**: `tsv --version`, asked of the binary by
   `bench-all-and-update-readme.mjs`, cross-checked against the platform
@@ -857,6 +857,7 @@ formatters, on `.svelte` files only.
 
   | version | pass                            | stdio              | crashes  |
   | ------- | ------------------------------- | ------------------ | -------- |
+  | 0.7.25  | `--check`                       | both on one pipe   | 15 / 60  |
   | 0.7.23  | `--check` (what preflight runs) | both on one pipe   | 24 / 100 |
   | 0.7.23  | `--check`                       | out=pipe, err=file | 0 / 40   |
   | 0.7.23  | `--check`                       | out=file, err=pipe | 0 / 40   |
@@ -876,7 +877,7 @@ formatters, on `.svelte` files only.
   a `would format <path>` line per rewritten file (~2,000, well past a 64 KiB
   pipe buffer); when the reader falls behind, a write returns EAGAIN, Rust's
   `println!` panics (`failed printing to stdout: Resource temporarily
-unavailable (os error 11)`), and the release build aborts. The panic message is
+  unavailable (os error 11)`), and the release build aborts. The panic message is
   usually lost, since stderr is the same full pipe; it surfaced once in a dozen
   crashes. That accounts for every row above: a file or `/dev/null` never returns
   EAGAIN, split streams keep oxfmt's flag off the binary's stdout, hyperfine
