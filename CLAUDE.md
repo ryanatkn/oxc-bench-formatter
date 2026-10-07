@@ -203,7 +203,12 @@ all, since all of its rows are tsv and tsv is non-configurable.
   table, the memory counterpart of timing without `--ignore-failure`; without it
   the run is excluded and a `→ … runs crashed` line under the rows says so. A
   formatter's own non-zero exit still counts as a measurement here — the timed
-  pass before it is what fails a scenario on one.
+  pass before it is what fails a scenario on one. A row's `±` is the spread
+  within one run's samples, and in the two embedded scenarios that is three:
+  prettier's peak on storybook ranges over roughly 1.5–1.85 GB between
+  identical invocations (heap growth under GC, not input), so its mean and its
+  ratio to oxfmt move several percent between regenerations with nothing
+  changed. Resample before reading a shift there as a regression.
 - **`benchRows(rows, {projectRoot, warmup, runs, prepare, baseline})`** — one
   scenario's three passes (preflight → hyperfine → memory) from a single
   `[{name, command, check}]` list, so a row can't be added to one pass and missed
@@ -387,6 +392,12 @@ formatter is handed the same files, and preflight still aborts on any rejection
 outside it. A new one is an abort that names the file: add it to the list, or
 move the pin. An entry a pin bump made stale is harmless (`rm -f`).
 
+Read the two lines together: the header's `N files a formatter rejects removed`
+and, under it, preflight's `all formatters accept the whole corpus; nothing
+excluded`. The second describes the corpus _after_ that removal — "nothing
+excluded" means preflight filtered nothing further, which it never does. The
+removal itself is printed, not recorded: `results.json` carries no key for it.
+
 One limit in those two: only oxfmt reports how many files it looked at, so the
 scope-parity check has nothing to compare and the pair's scopes (prettier's
 `--ignore-unknown` over everything, oxfmt's own file types minus `*.toml`) are
@@ -511,9 +522,9 @@ comparable with upstream's published numbers.
 The three tsv-free scenarios keep upstream's settings, except that
 `bench-full-features` now sets oxfmt's `printWidth` to 100 to match the prettier
 width upstream already chose there — that scenario was comparing prettier at 100
-against oxfmt at 80. It changes little in practice (oxfmt rewrites 2082 files
-either way; the sort-imports and tailwind transforms dominate), but the comparison
-is no longer lopsided by construction.
+against oxfmt at 80. It changes little in practice (the width moves under 1% of
+the files oxfmt rewrites; the sort-imports and tailwind transforms dominate), but
+the comparison is no longer lopsided by construction.
 
 ## Running
 
@@ -680,7 +691,9 @@ banner title, which that site keys its per-scenario copy on), `name`, `target`,
 `corpus` (the provenance line — which revision of the corpus these numbers came
 from), `warmup_runs` / `benchmark_runs`, `settle_seconds` in the scenarios that settle,
 the `preflight` rows, `files` (the file count preflight's counting formatters
-agreed on, where one reports it), `timings` in
+agreed on, where one reports it — in the two embedded scenarios that is oxfmt's
+count alone, the only one reported there, so it is oxfmt's scope and not one
+prettier was held to), `timings` in
 milliseconds from hyperfine's own `--export-json`, `fastest` and `speedups`
 (hyperfine's `Summary`, recomputed from the same means since it isn't exported;
 `fastest` is absent when nothing was timed),

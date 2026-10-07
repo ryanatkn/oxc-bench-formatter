@@ -1227,7 +1227,8 @@ export function runPreflight(checks, { quiet = false } = {}) {
 
   // The file count every counting formatter just agreed on — the size of the job,
   // which the corpus line (a revision, not a size) doesn't say. Absent when no
-  // formatter in the scenario reports one.
+  // formatter in the scenario reports one. Where only one does (oxfmt, in the two
+  // embedded scenarios) it is that formatter's scope, with nothing to agree with.
   if (record && !quiet && sizes.size === 1) record.files = [...sizes][0];
 
   // Never for the self-test's `quiet` passes, which have more checks to make.
