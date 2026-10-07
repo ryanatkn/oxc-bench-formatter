@@ -7,6 +7,7 @@ import {
   printHeader,
   printCorpus,
   printTarget,
+  resetCorpusCommand,
   runHyperfine,
   runMemoryBenchmarks,
   setupCwd,
@@ -32,7 +33,7 @@ async function main() {
   console.log("- Git reset before each run");
   console.log("");
 
-  const prepareCmd = `git -C ${dataDir} reset --hard && sed -i.bak '/require("tailwindcss\\/defaultTheme")/d' ${dataDir}/gui/tailwind.config.cjs && rm -f ${dataDir}/gui/tailwind.config.cjs.bak ${dataDir}/.prettierrc`;
+  const prepareCmd = `${resetCorpusCommand(dataDir)} && sed -i.bak '/require("tailwindcss\\/defaultTheme")/d' ${dataDir}/gui/tailwind.config.cjs && rm -f ${dataDir}/gui/tailwind.config.cjs.bak ${dataDir}/.prettierrc`;
 
   await runHyperfine([
     "--ignore-failure",

@@ -5,9 +5,9 @@
 //
 // A depth-1 fetch of the commit itself — GitHub serves a fetch by full SHA — so
 // it costs what the shallow clone did. The result is a git repo with the pinned
-// commit checked out, which the scenarios need twice over: `git reset --hard` is
-// their per-run reset, and being its own repo is what keeps tsv's discovery from
-// reading this repo's .gitignore.
+// commit checked out, which the scenarios need twice over: their per-run reset
+// is git's (`resetCorpusCommand` in ./utils.mjs), and being its own repo is what
+// keeps tsv's discovery from reading this repo's .gitignore.
 
 import { execFileSync } from "child_process";
 import { existsSync, rmSync } from "fs";

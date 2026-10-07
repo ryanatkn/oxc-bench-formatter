@@ -7,6 +7,7 @@ import {
   printHeader,
   printCorpus,
   printTarget,
+  resetCorpusCommand,
   runHyperfine,
   runMemoryBenchmarks,
   setupCwd,
@@ -32,7 +33,7 @@ async function main() {
   console.log("- Git reset before each run");
   console.log("");
 
-  const prepareCmd = `git -C ${dataDir} reset --hard`;
+  const prepareCmd = resetCorpusCommand(dataDir);
 
   await runHyperfine([
     "--ignore-failure",

@@ -4,7 +4,13 @@ import { spawn } from "child_process";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 
-import { assertBenchReady, clearResults } from "./shared/utils.mjs";
+import {
+  assertBenchReady,
+  clearResults,
+  runLockEnv,
+  runLockStdio,
+  takeRunLock,
+} from "./shared/utils.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -22,7 +28,9 @@ const scenarios = [
 async function runScenario(scenario) {
   return new Promise((resolve, reject) => {
     const scriptPath = `${__dirname}/${scenario}/bench.mjs`;
-    const proc = spawn("node", [scriptPath], { stdio: "inherit" });
+    // Each scenario is handed the suite's run lock rather than taking its own, so
+    // one that outlives this process still holds it.
+    const proc = spawn("node", [scriptPath], { stdio: runLockStdio(), env: runLockEnv() });
     proc.on("close", (code) => {
       if (code !== 0) {
         reject(new Error(`${scenario} failed with code ${code}`));
@@ -57,6 +65,10 @@ async function main() {
   // keeping it out of the run is what lets the machine be offline for the
   // benchmark itself. Missing corpora or dependencies stop here, named.
   assertBenchReady(__dirname);
+
+  // One run at a time over this checkout, held from here to the last scenario:
+  // before `clearResults` below can empty another run's records.
+  takeRunLock();
 
   console.log("=========================================");
   console.log("JavaScript/TypeScript Formatter Benchmark");

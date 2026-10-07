@@ -13,6 +13,7 @@ import {
   printRunCounts,
   printCorpus,
   printTarget,
+  resetCorpusCommand,
   setupCwd,
 } from "../shared/utils.mjs";
 import {
@@ -66,7 +67,7 @@ async function main() {
     process.exit(1);
   }
 
-  const prepareCmd = `git -C ${dataDir} reset --hard`;
+  const prepareCmd = resetCorpusCommand(dataDir);
 
   // Reset before the preflight below, not just between timed runs: its parse
   // check and file counts have to describe the corpus that gets benchmarked, not

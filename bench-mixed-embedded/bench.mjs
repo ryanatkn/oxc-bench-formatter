@@ -7,6 +7,7 @@ import {
   printHeader,
   printCorpus,
   printTarget,
+  resetCorpusCommand,
   runHyperfine,
   runMemoryBenchmarks,
   setupCwd,
@@ -32,7 +33,7 @@ async function main() {
   console.log("- Git reset before each run");
   console.log("");
 
-  const prepareCmd = `git -C ${dataDir} reset --hard && find ${dataDir} -name 'prettier.config.*' -o -name '.prettierrc*' | xargs rm -f`;
+  const prepareCmd = `${resetCorpusCommand(dataDir)} && find ${dataDir} -name 'prettier.config.*' -o -name '.prettierrc*' | xargs rm -f`;
 
   await runHyperfine([
     "--ignore-failure",

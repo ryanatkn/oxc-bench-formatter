@@ -3,8 +3,11 @@ import { createHash } from "crypto";
 import { createRequire } from "module";
 import {
   chmodSync,
+  closeSync,
   existsSync,
+  fstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -312,8 +315,107 @@ export function warnUnshimmedTsvRows(projectRoot, names) {
 export { FORMATTER_NAMES };
 
 export function setupCwd(importMetaUrl) {
+  // First, since it is every scenario's first call: before a corpus is reset or
+  // a record started, and without a line of its own in upstream's scenarios.
+  takeRunLock();
   const __dirname = dirname(fileURLToPath(importMetaUrl));
   process.chdir(__dirname);
+}
+
+/** The checkout this harness runs in — what a run locks. */
+const CHECKOUT = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+/** Tells a scenario `bench-all.mjs` spawns where the lock it was handed is, or that there is none. */
+const RUN_LOCK_ENV = "BENCH_RUN_LOCK_FD";
+/** Where a spawned child finds the lock: the first descriptor past its stdio. */
+const RUN_LOCK_CHILD_FD = 3;
+/** `flock`'s exit status for a lock someone else holds, told apart from its own failures. */
+const RUN_LOCK_HELD_STATUS = 75;
+
+/** This process's descriptor on the run lock, or null while it holds none. */
+let runLockFd = null;
+
+/**
+ * Take this checkout's run lock, or exit: one run at a time over these corpora.
+ *
+ * Two runs sharing a checkout are each wrong, and neither says so. Each is timed
+ * under the other's load, and each resets and formats files the other is partway
+ * through — which is also how a corpus ends up off its commit behind git's back
+ * (see `resetCorpusCommand`). `bench-all.mjs` empties `results/` as it starts,
+ * too, so the second run deletes the first one's records.
+ *
+ * The lock is an `flock` on the checkout directory itself, so there is no lock
+ * file to go stale, and it belongs to an open descriptor rather than a pid:
+ * every process handed the descriptor holds the lock until the last of them
+ * exits. That is what covers a run killed with its hyperfine still going —
+ * `runHyperfine` hands hyperfine the descriptor, its shells and formatters
+ * inherit it, and the next run is refused until that tree is gone.
+ * `bench-all.mjs` takes the lock for the whole suite and hands it to each
+ * scenario the same way (`runLockStdio`, `runLockEnv`); a scenario started
+ * directly takes its own, in `setupCwd`.
+ *
+ * Not covered: a scenario killed during its memory pass leaves at most one
+ * formatter still writing without the descriptor — one command's length, where
+ * an orphaned hyperfine is the rest of a scenario's timing.
+ *
+ * Node has no `flock`, so util-linux's `flock(1)` takes it on the descriptor it
+ * inherits. Where that can't be done (no such binary, as on macOS) the run goes
+ * ahead unguarded and says so.
+ */
+export function takeRunLock() {
+  if (runLockFd !== null) return;
+
+  // A parent settled it: it holds the lock and handed it down, or it couldn't
+  // take one and has already said so. The descriptor is checked rather than
+  // believed, so a stray variable can't pass something else off as the lock.
+  const handed = process.env[RUN_LOCK_ENV];
+  if (handed === "none") return;
+  if (handed === String(RUN_LOCK_CHILD_FD)) {
+    try {
+      const [held, checkout] = [fstatSync(RUN_LOCK_CHILD_FD), statSync(CHECKOUT)];
+      if (held.dev === checkout.dev && held.ino === checkout.ino) {
+        runLockFd = RUN_LOCK_CHILD_FD;
+        return;
+      }
+    } catch {
+      // not an open descriptor: take the lock here instead
+    }
+  }
+
+  const fd = openSync(CHECKOUT, "r");
+  const taken = spawnSync(
+    "flock",
+    ["-n", "-E", String(RUN_LOCK_HELD_STATUS), String(RUN_LOCK_CHILD_FD)],
+    { stdio: ["ignore", "ignore", "ignore", fd] },
+  );
+  if (taken.status === 0) {
+    runLockFd = fd;
+    return;
+  }
+  closeSync(fd);
+  if (taken.status === RUN_LOCK_HELD_STATUS) {
+    console.error("Another benchmark run holds this checkout: a scenario still running, or");
+    console.error("a hyperfine one left behind (`pgrep -a hyperfine`). Two runs over one");
+    console.error("checkout load each other's timings and rewrite each other's files.");
+    console.error("Wait for it, or stop it.");
+    process.exit(1);
+  }
+  console.warn(
+    `Warning: no run lock (flock ${taken.error ? "not available" : `exited ${taken.status}`}) — nothing stops a second run over this checkout from overlapping this one.`,
+  );
+}
+
+/** `stdio` for a child that has to hold the run lock for as long as it lives. */
+export function runLockStdio() {
+  return runLockFd === null ? "inherit" : ["inherit", "inherit", "inherit", runLockFd];
+}
+
+/** The environment for a scenario spawned with `runLockStdio`, naming what it was handed. */
+export function runLockEnv() {
+  return {
+    ...process.env,
+    [RUN_LOCK_ENV]: runLockFd === null ? "none" : String(RUN_LOCK_CHILD_FD),
+  };
 }
 
 /**
@@ -597,6 +699,36 @@ export function describeCorpus(target) {
 }
 
 /**
+ * The shell command that puts a corpus checkout back at its commit, byte for
+ * byte — every git-backed scenario's per-run reset.
+ *
+ * Not a bare `git reset --hard`, which restores only the files git's cached stat
+ * data calls modified. A formatter that rewrites a file in place at its old
+ * size, within the same second git checked that file out, can leave the stat
+ * data matching a file whose content no longer does. Git then calls the file clean
+ * for good and every later reset leaves it formatted: the corpus is no longer
+ * the commit, and nothing in a run says so, since every formatter reads the same
+ * stale files and their preflight counts still agree. It takes a writer
+ * overlapping a reset to set up — two runs over one corpus, or one killed with
+ * its hyperfine still going, both of which `takeRunLock` refuses — but once set
+ * it outlives them, so the reset repairs it rather than relying on that.
+ *
+ * So the index is rebuilt from the commit first (`read-tree` carries no stat
+ * data over), which leaves git nothing to trust: `update-index --refresh` then
+ * hashes every tracked file and re-records the ones that match, and
+ * `reset --hard` rewrites the rest. The refresh only spares the matching files a
+ * rewrite — without it the reset would write them all — so its exit status is
+ * kept out of the chain. `--git-dir` is pinned so a `data/` with no `.git` of its
+ * own fails here instead of resetting this repo.
+ *
+ * `preflight-selftest.mjs` holds this to a file `git status` calls clean.
+ */
+export function resetCorpusCommand(dataDir) {
+  const git = `git -C ${dataDir} --git-dir=.git`;
+  return `${git} read-tree HEAD && { ${git} update-index -q --refresh || true; } && ${git} reset --hard`;
+}
+
+/**
  * Assert a scenario's three scoping files name the same extensions.
  *
  * `prettierignore`, oxfmt's `ignorePatterns`, and biome's `files.includes` each
@@ -855,6 +987,12 @@ export function runPreflight(checks, { quiet = false } = {}) {
   // Each check's stdout and stderr are merged into this file, never a pipe: see
   // the comment on the `execSync` below.
   const outputPath = join(tmpdir(), `bench-formatter-preflight-${process.pid}.log`);
+  // `FORCE_COLOR` makes prettier and oxfmt colour their diagnostics even into a
+  // file, and the escape codes land between the tokens the matchers anchor on:
+  // prettier's counts go unread, and oxfmt's rejected files read as none. The
+  // checks run without it; the timed commands keep the environment they were given.
+  const uncolored = { ...process.env };
+  delete uncolored.FORCE_COLOR;
 
   for (const { name, command } of checks) {
     let output = "";
@@ -871,7 +1009,7 @@ export function runPreflight(checks, { quiet = false } = {}) {
       // Resource temporarily unavailable"), which its release build turns into a
       // SIGABRT — killing the check partway through about half the time. A file
       // never returns EAGAIN, and needs no capture buffer to overflow either.
-      execSync(`${command} > ${outputPath} 2>&1`, { stdio: "ignore" });
+      execSync(`${command} > ${outputPath} 2>&1`, { stdio: "ignore", env: uncolored });
     } catch (error) {
       // check mode exits non-zero for "would change" and for real errors alike,
       // so a normal non-zero exit carries no signal — the diagnostics do. But a
@@ -1064,8 +1202,10 @@ export function runHyperfine(args) {
       if (record) record.aborted = `a timed run failed — ${error.message}`;
       reject(error);
     };
+    // The run lock rides along, so a hyperfine that outlives this process still
+    // holds it (see `takeRunLock`).
     const proc = spawn("hyperfine", [`--export-json=${exportPath}`, ...args], {
-      stdio: "inherit",
+      stdio: runLockStdio(),
     });
     // A missing hyperfine is a spawn error, not an exit code; without this it
     // surfaces as an unhandled event rather than the scenario's own failure.

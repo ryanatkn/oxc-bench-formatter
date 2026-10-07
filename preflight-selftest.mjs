@@ -25,6 +25,11 @@
 // every count must read exactly 1, so a count pattern that drifted can't quietly
 // skew the cross-formatter comparison preflight makes from them.
 //
+// One check is not about a matcher: the per-run corpus reset
+// (`resetCorpusCommand`) must restore a file whose content changed while git's
+// stat data still calls it clean. Preflight can't see that state — every
+// formatter reads the same stale file — so it is held to a fixture here.
+//
 // The fixtures and their configs are generated into a temp directory, so nothing
 // broken is ever committed and this repo's own `vp check` never sees them. On
 // failure the directory is left in place and its path printed.
@@ -33,7 +38,8 @@
 // `bench-all.mjs` also runs it before any scenario, so a dead matcher stops the
 // suite before it produces numbers.
 
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { execFileSync, execSync } from "child_process";
+import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "fs";
 import { createRequire } from "module";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
@@ -42,6 +48,7 @@ import { fileURLToPath } from "url";
 import {
   assertScopeConfigsAgree,
   createFormatters,
+  resetCorpusCommand,
   resolveTsvNodeBin,
   runPreflight,
 } from "./shared/utils.mjs";
@@ -208,6 +215,11 @@ async function main() {
   process.chdir(fixtureDir);
   const formatters = createFormatters(projectRoot, ".");
 
+  // Every check below runs with colour forced, the setting that used to hide
+  // prettier's counts and oxfmt's rejected files from the matchers: preflight
+  // has to read the same diagnostics whatever the shell that started it exports.
+  process.env.FORCE_COLOR = "1";
+
   console.log("=========================================");
   console.log("Preflight matcher self-test");
   console.log("=========================================");
@@ -360,6 +372,55 @@ async function main() {
         });
         console.log(`  scope parity: FAILED — aborted for the wrong reason: ${error.message}`);
       }
+    }
+  }
+
+  // The per-run reset must restore a file git's stat data calls clean — what a
+  // same-size in-place rewrite can leave behind, and what a bare
+  // `git reset --hard` then never repairs (see `resetCorpusCommand`). The fixture
+  // reaches that state without a race: a backdated file git has recorded,
+  // rewritten in place at its old size and backdated again, in a repo told to
+  // ignore ctime, the one stat field a rewrite can't put back.
+  {
+    const repo = mkdtempSync(join(tmpdir(), "bench-formatter-reset-"));
+    const file = join(repo, "a.ts");
+    const committed = 'const a = "x";\n';
+    const rewritten = "const a = 'x';\n";
+    const git = (args) =>
+      execFileSync(
+        "git",
+        ["-C", repo, "-c", "user.name=bench", "-c", "user.email=bench@localhost", ...args],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+      );
+    const backdate = () => utimesSync(file, 1577836800, 1577836800);
+    let problem = null;
+    try {
+      git(["-c", "init.defaultBranch=main", "init", "-q"]);
+      git(["config", "core.trustctime", "false"]);
+      writeFileSync(file, committed);
+      git(["add", "a.ts"]);
+      git(["-c", "commit.gpgsign=false", "commit", "-q", "-m", "fixture"]);
+      backdate();
+      git(["update-index", "--refresh"]);
+      writeFileSync(file, rewritten, { flag: "r+" });
+      backdate();
+      if (git(["status", "--porcelain"]) !== "") {
+        problem = "the fixture's rewrite is visible to git, so the check proves nothing";
+      } else {
+        execSync(resetCorpusCommand(repo), { stdio: "ignore" });
+        if (readFileSync(file, "utf8") !== committed) {
+          problem = "left a rewritten file that git calls clean";
+        }
+      }
+    } catch (error) {
+      problem = `could not run: ${error.message}`;
+    }
+    if (problem) {
+      failures.push({ name: "corpus reset", problems: [problem] });
+      console.log(`  corpus reset: FAILED — ${problem} (fixture kept: ${repo})`);
+    } else {
+      console.log("  corpus reset: ok (restores a file git calls clean)");
+      rmSync(repo, { recursive: true, force: true });
     }
   }
 

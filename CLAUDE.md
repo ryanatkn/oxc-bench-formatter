@@ -80,6 +80,15 @@ is upstream's, untouched.
   `shared/clone-corpus.mjs`, the workflows' checkout steps carry the same SHAs as
   `ref:`, and the readiness check refuses a checkout at any other commit (see
   "Every corpus is pinned" under Running).
+- **The per-run reset doesn't trust git's stat data**: upstream's three
+  scenarios reset with `git -C data reset --hard`; here all five git-backed
+  scenarios take the command from `resetCorpusCommand` (`shared/utils.mjs`) —
+  one changed line and one import in each of upstream's three.
+- **One run at a time per checkout**: every scenario and `bench-all.mjs` take a
+  run lock (`takeRunLock`, `shared/utils.mjs`) and refuse to start beside
+  another run or a hyperfine one left behind. No line of its own in upstream's
+  scenarios — it rides in `setupCwd` — and in upstream's `bench-all.mjs` the
+  take and the hand-down to each scenario it spawns.
 - **Setup is never auto-run**: upstream's `bench-all.mjs` shells out to
   `./init.sh` when a corpus is missing; here it stops with `assertBenchReady`, so
   the one networked step stays outside the benchmark (see Running). `package.json`
@@ -98,7 +107,7 @@ bench-formatter/
 ├── results.json                     # the last published run as data — what tsv.fuz.dev reads
 ├── results/                         # per-scenario records of the last run — gitignored
 ├── init.sh                          # the one networked step: install deps, clone data repos, download parser.ts, check the tsv binary resolves
-├── preflight-selftest.mjs           # verify preflight's matchers still read each tool's diagnostics
+├── preflight-selftest.mjs           # verify preflight's matchers still read each tool's diagnostics, and the corpus reset restores a file git calls clean
 ├── shared/utils.mjs                 # the harness: formatter commands + hyperfine + memory
 ├── shared/corpus-pins.mjs           # the commits the cloned corpora are pinned to, and the check that they're there
 ├── shared/clone-corpus.mjs          # clone one corpus at its pin (what init.sh runs)
@@ -159,7 +168,8 @@ all, since all of its rows are tsv and tsv is non-configurable.
     unlike tsv; only `bench-svelte` uses it.
   - Note in the source: do **not** pass prettier `--experimental-cli` (it
     behaves differently from the stable CLI).
-- **`runHyperfine(args)`** — spawns `hyperfine` (stdio inherited), resolves on exit 0.
+- **`runHyperfine(args)`** — spawns `hyperfine` (stdio inherited, plus the run
+  lock's descriptor), resolves on exit 0.
 - **`runMemoryBenchmarks(benchmarks, runs, {baseline, failOnCrash})`** /
   `measureMemory` — runs each command under GNU `time -f '%M'` (peak RSS in
   KB → MB). That figure is the **largest single process** in the command's tree,
@@ -191,6 +201,35 @@ all, since all of its rows are tsv and tsv is non-configurable.
 - **`printCorpus(describeCorpus(path))`** — the `Corpus:` line and the call that
   records it. Takes the text, not the path, because `bench-svelte` composes its
   corpora pin with the snapshot's own commit.
+- **`resetCorpusCommand(dataDir)`** — the per-run reset of every git-backed
+  corpus: the index rebuilt from the commit (`read-tree`, so no stat data
+  survives), every tracked file hashed against it (`update-index --refresh`),
+  then `git reset --hard` for the ones that differ. A bare `git reset --hard`
+  trusts git's stat data, and a file rewritten in place at its old size within
+  the same second git checked it out can keep matching that data with different
+  content — clean to git from then on, so no later reset restores it and the
+  corpus silently stops being its commit. Only a writer overlapping a reset sets
+  that up (two runs over one corpus, or a killed run whose hyperfine is still
+  going), which `takeRunLock` refuses; the reset repairs the state rather than
+  relying on that. The hash reads each corpus once per reset and rewrites
+  nothing that already matches. `--git-dir` is pinned, so a `data/` that isn't
+  its own repo fails rather than resetting this one. `preflight-selftest.mjs`
+  holds it to a fixture git calls clean.
+- **`takeRunLock()`** / **`runLockStdio()`** / **`runLockEnv()`** — one run at a
+  time over a checkout. Two runs sharing one time each other's load and reset
+  and format each other's files, and `bench-all.mjs` empties `results/` under
+  whichever started first, none of which either run reports. The lock is an
+  `flock` on the checkout directory, taken by util-linux's `flock(1)` on a
+  descriptor this process opened: no lock file to go stale, and it is held by
+  every process that inherits the descriptor until the last exits. `runHyperfine`
+  passes it to hyperfine, so a run killed with its hyperfine still going keeps
+  the next one out until that tree is gone; `bench-all.mjs` takes it before the
+  self-test and hands it to each scenario (`BENCH_RUN_LOCK_FD` names the
+  descriptor, which the scenario checks is the checkout before believing), and a
+  scenario run directly takes its own in `setupCwd`. A second run exits 1 with a
+  message, before any record or corpus is touched. Not covered: a scenario
+  killed during its memory pass leaves at most one formatter still writing.
+  Without `flock(1)` (macOS) the run warns on stderr and goes ahead unguarded.
 - **`printHeader`** — display helper. (`FORMATTER_NAMES` beside it is upstream's
   and unused by anything, here or upstream; left in place rather than deleted for
   the merge surface.)
@@ -200,7 +239,8 @@ all, since all of its rows are tsv and tsv is non-configurable.
   disagree with the record. Upstream's three print their own line and settle on
   nothing.
 - **`setupCwd(import.meta.url)`** — each `bench.mjs` chdirs into its own dir so
-  relative config/data paths resolve.
+  relative config/data paths resolve. Takes the run lock first, being every
+  scenario's first call.
 - **`assertBenchReady(projectRoot)`** / **`missingBenchSetup`** — the gate
   `bench-all.mjs` and `update-readme` open with (dependencies, the seven
   corpora, each cloned one at its pinned commit, hyperfine), and the list behind it, which `init.sh` closes on too
@@ -217,15 +257,15 @@ all, since all of its rows are tsv and tsv is non-configurable.
 
 ## Scenarios
 
-| Dir                       | Corpus                                                                         | Reset / prepare                                                    | warmup × runs | Formatters run             |
-| ------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------- | -------------------------- |
-| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                       | `cp parser.ts.bak parser.ts`                                       | 3 × 20        | all 5 (incl. tsv), tsv-npm |
-| `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                  | `git reset --hard`                                                 | 3 × 10        | all 4 (no tsv — JSX/TSX)   |
-| `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)         | `git reset --hard` + rm stray prettier configs                     | 1 × 3         | prettier+oxc, oxfmt        |
-| `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)  | `git reset --hard` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt        |
-| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset                  | `git reset --hard` (its own outline checkout)                      | 3 × 10        | all 5 (incl. tsv), tsv-npm |
-| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section) | `git reset --hard` (snapshot repo built by `setup-corpus.mjs`)     | 3 × 10        | tsv, tsv-npm, rsvelte-fmt  |
-| `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                   | `cp parser.ts.bak parser.ts`                                       | 3 × 20        | tsv, tsv-npm, tsv-wasm     |
+| Dir                       | Corpus                                                                         | Reset / prepare                                                      | warmup × runs | Formatters run             |
+| ------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------- | ------------- | -------------------------- |
+| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                       | `cp parser.ts.bak parser.ts`                                         | 3 × 20        | all 5 (incl. tsv), tsv-npm |
+| `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                  | `resetCorpusCommand`                                                 | 3 × 10        | all 4 (no tsv — JSX/TSX)   |
+| `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)         | `resetCorpusCommand` + rm stray prettier configs                     | 1 × 3         | prettier+oxc, oxfmt        |
+| `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)  | `resetCorpusCommand` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt        |
+| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset                  | `resetCorpusCommand` (its own outline checkout)                      | 3 × 10        | all 5 (incl. tsv), tsv-npm |
+| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section) | `resetCorpusCommand` (snapshot repo built by `setup-corpus.mjs`)     | 3 × 10        | tsv, tsv-npm, rsvelte-fmt  |
+| `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                   | `cp parser.ts.bak parser.ts`                                         | 3 × 20        | tsv, tsv-npm, tsv-wasm     |
 
 **Quick runs**: the four tsv scenarios (`bench-large-single-file`,
 `bench-ts-only`, `bench-svelte`, `bench-tsv-delivery`) take
@@ -332,6 +372,12 @@ matchers it can reach. `bench-all.mjs` runs it before any scenario and treats
 failure as fatal; run it alone with `pnpm run preflight-selftest` after upgrading a
 formatter. Its output sits above the first `Benchmarking` banner, so the README
 scrape never picks it up.
+
+It runs every check with `FORCE_COLOR` set. prettier and oxfmt honour that even
+when writing to a file, and the escape codes land between the tokens the
+matchers anchor on — prettier's counts go unread and oxfmt's rejected files read
+as none — so `runPreflight` drops the variable from its checks' environment (the
+timed commands keep theirs), and the self-test holds it to that.
 
 Two design details it locks in. Matchers whose prefix isn't already unique to a
 diagnostic line anchor their capture on a source-file extension — prettier echoes
