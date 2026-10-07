@@ -63,6 +63,21 @@ is upstream's, untouched.
 - **`bench-full-features`** (upstream's): oxfmt's `printWidth` raised to 100 to
   match the prettier width upstream already set there — it was comparing 100
   against 80.
+- **Every scenario runs a preflight, and none passes `--ignore-failure`**:
+  upstream's other three (`bench-js-no-embedded`, `bench-mixed-embedded`,
+  `bench-full-features`) gained the reset-then-`runPreflight` block
+  `bench-large-single-file` has, lost the flag, pass `failOnCrash` to the memory
+  pass, and read their run counts through `benchRunCounts`. The two embedded ones
+  also remove the files one of their formatters rejects, in the prepare command
+  (`REJECTED_FILES` in each `bench.mjs`), and print a line saying so.
+- **`bench-js-no-embedded`** (upstream's): oxfmt's `ignorePatterns` gained the dot
+  upstream's bare `!*js` lacks. That pattern also takes `.mjs`, which the prettier
+  and biome scopes beside it leave out, so oxfmt was formatting a file the other
+  three weren't — the mismatch preflight's file-count check refuses.
+- **A preflight-only pass**: `BENCH_PREFLIGHT_ONLY=1` (`pnpm run preflight`) stops
+  every scenario once its preflight has passed. The switch lives in
+  `shared/utils.mjs`; upstream's `bench-all.mjs` carries its banner line, leaves
+  `results/` alone under it, and exits non-zero when a scenario failed.
 - **Every scenario** prints and records a `Corpus:` provenance line, and memory rows carry a
   ratio to a fixed per-scenario baseline (tsv where it runs, oxfmt in upstream's
   three) rather than to whichever tool used least memory that run.
@@ -183,18 +198,19 @@ all, since all of its rows are tsv and tsv is non-configurable.
   is taken against — tsv in the tsv scenarios, oxfmt in upstream's — so the
   column doesn't re-anchor on whichever tool used least that run; a ratio below
   1 means less than the baseline. A run the command died from a signal in (GNU
-  time exits 128+n) is not a measurement: with `failOnCrash` (the tsv scenarios)
-  it aborts the scenario with an `→ aborting:` line and no table, the memory
-  counterpart of timing without `--ignore-failure`; without it the run is
-  excluded and a `→ … runs crashed` line under the rows says so. A formatter's
-  own non-zero exit still counts, as `--ignore-failure` does in the timed pass.
+  time exits 128+n) is not a measurement: with `failOnCrash` (which every
+  scenario passes) it aborts the scenario with an `→ aborting:` line and no
+  table, the memory counterpart of timing without `--ignore-failure`; without it
+  the run is excluded and a `→ … runs crashed` line under the rows says so. A
+  formatter's own non-zero exit still counts as a measurement here — the timed
+  pass before it is what fails a scenario on one.
 - **`benchRows(rows, {projectRoot, warmup, runs, prepare, baseline})`** — one
   scenario's three passes (preflight → hyperfine → memory) from a single
   `[{name, command, check}]` list, so a row can't be added to one pass and missed
-  in another. Carries the tsv-scenario rules in one place: no `--ignore-failure`,
+  in another. Carries the rules in one place: no `--ignore-failure`,
   `failOnCrash` on the memory pass, native tsv listed last. The three fork-added
-  scenarios use it; `bench-large-single-file` is upstream's file and keeps
-  upstream's three parallel lists, to hold the merge surface down.
+  scenarios use it; upstream's four files keep upstream's three parallel lists,
+  to hold the merge surface down.
 - **`resolveTsvNodeBin(projectRoot, row)`** / **`warnUnshimmedTsvRows`** — the
   pnpm-shaped bin shims for the tsv-npm and tsv-wasm rows, and the line a
   scenario prints when one couldn't be derived. See "The tsv-npm row".
@@ -252,33 +268,36 @@ all, since all of its rows are tsv and tsv is non-configurable.
   would wedge the scenario or fail it long after the corpus was set up. The
   resolved counts also seed the scenario's record, so one that preflight aborts
   before hyperfine runs still publishes the counts it printed rather than 0.
-  Wired into the four tsv scenarios; the three tsv-free ones keep upstream's
-  hard-coded constants (their records take the counts from hyperfine's argv).
+  Every scenario reads its counts through it.
+- **`preflightOnly()`** — whether `BENCH_PREFLIGHT_ONLY=1` is set. Under it
+  `runPreflight` ends the process once a scenario's preflight has passed, no
+  record is started, and `runHyperfine` refuses — so a scenario with no preflight
+  fails rather than being timed. See "After a bump, run the preflight alone"
+  under Running.
 
 ## Scenarios
 
-| Dir                       | Corpus                                                                         | Reset / prepare                                                      | warmup × runs | Formatters run             |
-| ------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------- | ------------- | -------------------------- |
-| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                       | `cp parser.ts.bak parser.ts`                                         | 3 × 20        | all 5 (incl. tsv), tsv-npm |
-| `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                  | `resetCorpusCommand`                                                 | 3 × 10        | all 4 (no tsv — JSX/TSX)   |
-| `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)         | `resetCorpusCommand` + rm stray prettier configs                     | 1 × 3         | prettier+oxc, oxfmt        |
-| `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)  | `resetCorpusCommand` + strip a tailwind `require` + rm `.prettierrc` | 1 × 3         | prettier+oxc, oxfmt        |
-| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset                  | `resetCorpusCommand` (its own outline checkout)                      | 3 × 10        | all 5 (incl. tsv), tsv-npm |
-| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section) | `resetCorpusCommand` (snapshot repo built by `setup-corpus.mjs`)     | 3 × 10        | tsv, tsv-npm, rsvelte-fmt  |
-| `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                   | `cp parser.ts.bak parser.ts`                                         | 3 × 20        | tsv, tsv-npm, tsv-wasm     |
+| Dir                       | Corpus                                                                         | Reset / prepare                                                                          | warmup × runs | Formatters run             |
+| ------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------- | -------------------------- |
+| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                       | `cp parser.ts.bak parser.ts`                                                             | 3 × 20        | all 5 (incl. tsv), tsv-npm |
+| `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                  | `resetCorpusCommand`                                                                     | 3 × 10        | all 4 (no tsv — JSX/TSX)   |
+| `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)         | `resetCorpusCommand` + rm stray prettier configs + rm rejected files                     | 1 × 3         | prettier+oxc, oxfmt        |
+| `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)  | `resetCorpusCommand` + strip a tailwind `require` + rm `.prettierrc` + rm rejected files | 1 × 3         | prettier+oxc, oxfmt        |
+| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset                  | `resetCorpusCommand` (its own outline checkout)                                          | 3 × 10        | all 5 (incl. tsv), tsv-npm |
+| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section) | `resetCorpusCommand` (snapshot repo built by `setup-corpus.mjs`)                         | 3 × 10        | tsv, tsv-npm, rsvelte-fmt  |
+| `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                   | `cp parser.ts.bak parser.ts`                                                             | 3 × 20        | tsv, tsv-npm, tsv-wasm     |
 
-**Quick runs**: the four tsv scenarios (`bench-large-single-file`,
-`bench-ts-only`, `bench-svelte`, `bench-tsv-delivery`) take
-`BENCH_WARMUP` / `BENCH_RUNS` overrides via
-`benchRunCounts`, so a change to the harness can be smoke-tested in seconds
-rather than minutes: `BENCH_WARMUP=0 BENCH_RUNS=1 BENCH_SETTLE_S=0 node
-./bench-ts-only/bench.mjs`. Drop the settle along with the counts — it costs 10s
-per command whatever the run count is, which on its own outlasts a smoke run.
-Numbers from an override are not publishable, and don't pretend to be — every
-settling scenario prints the counts and settle it resolved in its header and
-records them, so an override is visible in a scraped README and in
-`results.json`. The three tsv-free scenarios are upstream's files and keep
-upstream's hard-coded constants, to hold the merge surface down.
+**Quick runs**: every scenario takes `BENCH_WARMUP` / `BENCH_RUNS` overrides via
+`benchRunCounts`, so a change to the harness can be smoke-tested in a fraction
+of a full run: `BENCH_WARMUP=0 BENCH_RUNS=1 BENCH_SETTLE_S=0 node
+./bench-ts-only/bench.mjs`. Drop the settle along with the counts in the four
+tsv scenarios (the only ones that settle) — it costs 10s per command whatever
+the run count is, which on its own outlasts a smoke run. Numbers from an
+override are not publishable, and don't pretend to be — every scenario prints
+the counts it resolved in its header and records them, the settle with them
+where there is one, so an override is visible in a scraped README and in
+`results.json`. To ask only whether the formatters still accept the corpora,
+skip the timing altogether: `pnpm run preflight` (see Running).
 
 The two embedded/full-features scenarios deliberately drop plain-prettier and
 biome and bench only the prettier+oxc-parser vs oxfmt pair. File-type scoping is
@@ -293,16 +312,13 @@ formatter, including tsv, supports) so the comparison is apples-to-apples;
 same real-world repo minus the 682 `.tsx` files tsv cannot parse, which keeps the
 corpus third-party: no formatter here is measured on code it already shaped.
 
-**Methodology — preflight:** the three tsv-free upstream scenarios run hyperfine
-with `--ignore-failure` (and their memory pass tolerates a formatter's own
-non-zero exit, excluding and reporting only runs killed by a signal, since a
-process that died partway measured nothing), so a formatter that _errors_
-partway is timed rather than penalized — one that
-rejected much of the corpus could look artificially fast. The four tsv-inclusive
-scenarios drop the flag, because preflight has already ruled out the corpus
-reasons a formatter would exit non-zero: what's left is a real crash, and it must
-fail the scenario rather than be timed as a fast partial run.
-The four tsv-inclusive scenarios guard against this with
+**Methodology — preflight:** upstream runs hyperfine with `--ignore-failure`, so
+a formatter that _errors_ partway is timed rather than penalized — one that
+rejected much of the corpus could look artificially fast. No scenario here
+passes the flag, because preflight has already ruled out the corpus reasons a
+formatter would exit non-zero: what's left is a real crash, and it must fail the
+scenario rather than be timed as a fast partial run.
+Every scenario guards against the first with
 `runPreflight` (`shared/utils.mjs`), which runs each formatter's **check** command
 first, parses per-file parse errors out of its diagnostics (one matcher per tool —
 they share no error format), and reports what each rejects before any timing. It
@@ -352,12 +368,32 @@ some formatter's style — the fix is a different corpus, not a relaxed check: b
 a formatter against its own output measures its no-op path, which is not what any of
 these numbers claim to be.
 
-The asymmetry preflight watches for is real: tsv has no JSX parser, so JSX inside a
-`.js` file is a parse error for tsv and ordinary input for prettier, biome, and
-oxfmt. Outline's non-JSX subset is currently clean for all five, so nothing has
-ever aborted — it is a guard, not an active filter. The three tsv-free scenarios
-have no preflight; every formatter there is a JS-native tool that accepts the whole
-corpus, and a check pass over storybook/continue would cost minutes for no signal.
+The asymmetry preflight watches for is real, and not only tsv's. tsv has no JSX
+parser, so JSX inside a `.js` file is a parse error for tsv and ordinary input
+for prettier, biome, and oxfmt — though outline's non-JSX subset is clean for all
+five, so there it is a guard, not an active filter. The JS-native tools disagree
+among themselves too. On storybook, oxfmt refuses test fixtures named `.cjs` and
+written as ES modules, which prettier+oxc-parser formats. On continue, prettier's
+sort-imports plugin refuses declaration files oxfmt formats, and both refuse one
+that initializes a constant inside an ambient namespace. Under upstream's
+`--ignore-failure` all of that was timed without a word; an oxfmt upgrade that
+began refusing the storybook pair changed nothing a run printed.
+
+**The two embedded scenarios remove the files a formatter rejects**, in their
+prepare command (`REJECTED_FILES` in each `bench.mjs`) — where upstream already
+strips those corpora's own prettier configs — and print a line saying so. That is
+the corpus fixed rather than shrunk mid-run: the list is committed, every
+formatter is handed the same files, and preflight still aborts on any rejection
+outside it. A new one is an abort that names the file: add it to the list, or
+move the pin. An entry a pin bump made stale is harmless (`rm -f`).
+
+One limit in those two: only oxfmt reports how many files it looked at, so the
+scope-parity check has nothing to compare and the pair's scopes (prettier's
+`--ignore-unknown` over everything, oxfmt's own file types minus `*.toml`) are
+upstream's as given, not asserted equal. Their would-change counts differ and
+aren't compared either — that number is how far each tool's style sits from the
+repo's, not a scope. `bench-js-no-embedded` does assert parity: biome and oxfmt
+both count, and agree now that oxfmt's patterns carry the dot (see Deviations).
 
 **Matchers are the guard's weak point**, and `preflight-selftest.mjs` is what
 guards them: they read tool-specific diagnostic text, so a formatter that changes
@@ -367,7 +403,9 @@ directory (nothing broken is committed, so `vp check` never sees them) and drive
 the real `runPreflight` over each formatter three ways: a file it must reject, a
 valid-but-unformatted file containing `key: value` text it must accept, and — for
 the tools with an error signal — a path that doesn't exist, which must not read as
-clean. A missing binary is a skip with a notice, not a failure, so CI verifies the
+clean. prettier's two rows take a second pair outside the JS family — a JSON file
+they must reject by name and a Markdown one they must count — since the embedded
+scenarios point prettier at far more than source files. A missing binary is a skip with a notice, not a failure, so CI verifies the
 matchers it can reach. `bench-all.mjs` runs it before any scenario and treats
 failure as fatal; run it alone with `pnpm run preflight-selftest` after upgrading a
 formatter. Its output sits above the first `Benchmarking` banner, so the README
@@ -380,9 +418,12 @@ as none — so `runPreflight` drops the variable from its checks' environment (t
 timed commands keep theirs), and the self-test holds it to that.
 
 Two design details it locks in. Matchers whose prefix isn't already unique to a
-diagnostic line anchor their capture on a source-file extension — prettier echoes
+diagnostic line anchor their capture on the shape of a path — prettier echoes
 the offending source lines under the same `[error] ` prefix, so an unanchored
-capture reads `[error]   1 | const o = { a: 1 }` as a rejected file. And an
+capture reads `[error]   1 | const o = { a: 1 }` as a rejected file. prettier's
+anchor is any extension with no `|` before it, the gutter every echoed line
+carries and no path does; a list of source extensions, as tsv's diagnostics
+still use, left the embedded corpora's Markdown and YAML uncounted. And an
 unrecognized formatter name aborts rather than reporting clean.
 
 A fixture note worth keeping: JSX in a `.ts` file is **not** a universal parse
@@ -480,12 +521,26 @@ is no longer lopsided by construction.
 pnpm run setup                # ./init.sh — deps + corpora; the only networked step
 pnpm run bench                # all scenarios
 pnpm run update-readme        # run + rewrite README results/versions sections
+pnpm run preflight            # every scenario's preflight, nothing timed
 node ./bench-js-no-embedded/bench.mjs   # one scenario directly
 
 # offline — skip the package-manager wrapper (see the pnpm caveat below)
 node bench-all.mjs
 node bench-all-and-update-readme.mjs
+BENCH_PREFLIGHT_ONLY=1 node bench-all.mjs
 ```
+
+**After a bump, run the preflight alone.** Which files a formatter accepts is
+settled by what is pinned — the lockfile and the corpus commits — not by
+anything a run measures, so a dependency upgrade or a moved pin is when it can
+change, and `pnpm run preflight` asks then rather than partway through the next
+full run. It is the suite with `BENCH_PREFLIGHT_ONLY=1`: the self-test, then each
+scenario's reset and preflight, each stopping before any timing, in a few
+minutes against the full run's half hour. Nothing is timed or recorded
+(`results/` keeps the last run's records, and `update-readme` refuses to start
+under the variable), and unlike a benchmark run — which publishes an aborted
+scenario and carries on — it exits non-zero if any scenario's preflight failed.
+One scenario alone: `BENCH_PREFLIGHT_ONLY=1 node ./bench-mixed-embedded/bench.mjs`.
 
 **Setup is separate on purpose, and the network stops there.** `./init.sh` holds
 every network access in the suite — `pnpm install`, the four pinned clones, the `parser.ts` download,
@@ -651,7 +706,9 @@ record, never `results.json`.
   name to the `scenarios` array in `bench-all.mjs`, and add any corpus fetch to
   `init.sh`. Print its banner with `printHeader`, its corpus label with
   `printTarget`, and its provenance with `printCorpus(describeCorpus(…))` — those
-  start and fill the scenario's record in `results.json`.
+  start and fill the scenario's record in `results.json`. Run its rows through
+  `benchRows`, which is what gives it a preflight; a scenario that reaches
+  `runHyperfine` without one fails a preflight-only pass.
 - **New formatter**: add a command builder to `createFormatters` in
   `shared/utils.mjs`, then add a `-n=<name>` arg + command to each scenario's
   `runHyperfine([...])` call and a matching entry in its `runMemoryBenchmarks`
@@ -660,8 +717,9 @@ record, never `results.json`.
   `resolveTsv`), and source its version from the binary itself (not
   `vp exec … --version`, which only reaches npm bins) in
   `bench-all-and-update-readme.mjs`.
-- **A formatter in a preflight scenario needs three more entries**, all in
-  `shared/utils.mjs`, keyed by the same display name the scenario passes:
+- **A formatter needs three more entries for preflight**, which every scenario
+  runs, all in `shared/utils.mjs`, keyed by the same display name the scenario
+  passes:
   a `check.<name>` builder (same scope and config, no writes), a
   `PREFLIGHT_MATCHERS` pattern pulling rejected paths out of its diagnostics, and
   `PREFLIGHT_SCOPE_COUNTS` patterns for how many files it looked at and how many
@@ -807,9 +865,9 @@ Candidates:
 - tsv-scoped variants of the embedded scenarios (`bench-mixed-embedded`,
   `bench-full-features`) — i.e. narrowing those corpora to tsv's supported set
   rather than leaving tsv out of them entirely.
-- Preflight for the three tsv-free scenarios. It only guards the four tsv-inclusive
-  ones today; the `--ignore-failure` caveat applies everywhere, it just
-  has no known bite where every formatter is a JS-native tool.
+- A file count for prettier, so the two embedded scenarios can assert the pair is
+  scoped alike. prettier's check output names only the files it would change;
+  today oxfmt's count there has nothing to be compared with.
 - Command-level error signals for biome and oxfmt. `PREFLIGHT_ERROR_SIGNALS` covers
   prettier, tsv, and tsv-wasm; the other two have no error prefix that couldn't fire on an
   ordinary check run, so a failure that formats nothing still reads as clean there.
@@ -839,6 +897,12 @@ formatters, on `.svelte` files only.
   oxfmt delegation leg spawns on zero files (and prints a "No config found"
   notice — the directory hand-off doesn't forward `--config`); that overhead is
   part of how `rsvelte-fmt <dir>` ships, so it deliberately stays.
+- **Reading its row**: that launch is fixed cost, and at this corpus's size about
+  half the row. On a one-file directory (`hyperfine -N`) rsvelte-fmt takes ~85 ms,
+  tsv-npm ~33 ms and native tsv ~2 ms, so tsv's ratio over it moves with the
+  size of the corpus as much as with either formatter — narrowing flowbite-svelte
+  raised it with no engine having changed. tsv-npm, which pays a launch of its
+  own, is the like-for-like row; the native-tsv ratio is not a per-file speed.
 - **Config parity**: rsvelte-fmt is configurable where tsv is not, so
   `bench-svelte/oxfmtrc.json` pins it to tsv's fixed style — `printWidth: 100`,
   `useTabs`, `singleQuote`, `trailingComma: "none"` — making break decisions
@@ -894,7 +958,8 @@ formatters, on `.svelte` files only.
   builds a _missing_ `data/` (staged in a gitignored `data.tmp/` and renamed into
   place last, so an interrupted build never leaves a half-corpus). Regenerate with
   `rm -rf bench-svelte/data && node ./bench-svelte/setup-corpus.mjs`.
-- **No `--ignore-failure`** (alone among the scenarios): both formatters exit 0
+- **No `--ignore-failure`**, as in every scenario, and here with a known reason
+  to matter: both formatters exit 0
   on a successful write run, so any non-zero exit here is a real error — and
   rsvelte-fmt 0.7.x has a SIGABRT (its launcher propagates signal deaths as exit
   128+n, e.g. 134) that must abort the benchmark rather than be timed as a fast

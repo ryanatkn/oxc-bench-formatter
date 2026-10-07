@@ -84,6 +84,13 @@ const CLEAN_TS = `const o = {alpha: 1, beta: 2}
 export const pick = (p: Pair): string => p.left + o.alpha
 `;
 
+// prettier outside the JS family, where the embedded scenarios point it: a file
+// it must reject by name, and a valid unformatted one it must count. JSON with a
+// missing value, and a Markdown list in the marker prettier rewrites.
+const BROKEN_JSON = '{"alpha": }\n';
+
+const CLEAN_MD = "*   alpha\n*   beta\n";
+
 const BROKEN_SVELTE = "<script>let a = <div/></script>\n";
 
 const CLEAN_SVELTE = `<script>
@@ -121,6 +128,8 @@ const FIXTURES = {
   "clean2.ts": CLEAN_TS,
   "broken.svelte": BROKEN_SVELTE,
   "clean.svelte": CLEAN_SVELTE,
+  "broken.json": BROKEN_JSON,
+  "clean.md": CLEAN_MD,
 };
 
 /**
@@ -134,11 +143,22 @@ function buildCases(formatters) {
     // shared/utils.mjs: biome and oxfmt have no error prefix that can't also
     // appear on an ordinary check run, so they are knowingly unguarded there and
     // this case would fail for them.
-    { name: "prettier", command: (f) => formatters.check.prettier(f), detectsCommandErrors: true },
+    // `embedded` names a second fixture pair outside the JS family. prettier's
+    // patterns anchor on the shape of a path rather than on a diagnostic prefix
+    // of its own, and the embedded scenarios hand it Markdown, JSON, YAML and
+    // more — so a pattern that read only source extensions would leave those
+    // files uncounted and, rejected, unnamed.
+    {
+      name: "prettier",
+      command: (f) => formatters.check.prettier(f),
+      detectsCommandErrors: true,
+      embedded: { rejects: "broken.json", accepts: "clean.md" },
+    },
     {
       name: "prettier+oxc-parser",
       command: (f) => formatters.check.prettier(f, "prettierrc-oxc.json"),
       detectsCommandErrors: true,
+      embedded: { rejects: "broken.json", accepts: "clean.md" },
     },
     { name: "biome", command: (f) => formatters.check.biome(f), reportsConsidered: true },
     { name: "oxfmt", command: (f) => formatters.check.oxfmt(f), reportsConsidered: true },
@@ -240,7 +260,8 @@ async function main() {
   });
 
   for (const testCase of cases) {
-    const { name, command, rejects, accepts, detectsCommandErrors, reportsConsidered } = testCase;
+    const { name, command, rejects, accepts, detectsCommandErrors, reportsConsidered, embedded } =
+      testCase;
 
     const onBroken = probe(name, command(`./${rejects}`));
     if (onBroken.unavailable) {
@@ -283,6 +304,19 @@ async function main() {
       problems.push(`read ${onClean.counts?.considered ?? "no"} file count, expected 1`);
     }
 
+    if (embedded) {
+      const onBrokenEmbedded = probe(name, command(`./${embedded.rejects}`));
+      if (!onBrokenEmbedded.rejected.includes(embedded.rejects)) {
+        problems.push(`did not report ${embedded.rejects} as rejected`);
+      }
+      const onCleanEmbedded = probe(name, command(`./${embedded.accepts}`));
+      if (!onCleanEmbedded.clean || onCleanEmbedded.counts?.changed !== 1) {
+        problems.push(
+          `read ${onCleanEmbedded.counts?.changed ?? "no"} would-change count on ${embedded.accepts}, expected 1`,
+        );
+      }
+    }
+
     if (detectsCommandErrors) {
       const onMissing = probe(name, command("./does-not-exist.ts"));
       if (onMissing.clean) {
@@ -298,7 +332,8 @@ async function main() {
       for (const problem of problems) console.log(`      ${problem}`);
     } else {
       const covers = detectsCommandErrors ? ", catches command-level errors" : "";
-      console.log(`  ${name}: ok (rejects ${rejects}, clean on ${accepts}${covers})`);
+      const reads = embedded ? `, reads ${embedded.rejects} and ${embedded.accepts}` : "";
+      console.log(`  ${name}: ok (rejects ${rejects}, clean on ${accepts}${reads}${covers})`);
     }
   }
 

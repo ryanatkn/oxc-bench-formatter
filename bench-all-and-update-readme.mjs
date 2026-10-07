@@ -8,7 +8,13 @@ import { delimiter, dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
 
-import { assertBenchReady, RESULTS_DIR, resolveTsv, round } from "./shared/utils.mjs";
+import {
+  assertBenchReady,
+  preflightOnly,
+  RESULTS_DIR,
+  resolveTsv,
+  round,
+} from "./shared/utils.mjs";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -414,6 +420,13 @@ async function main() {
     // Setup is `./init.sh`, run separately and while online — everything from
     // here on reads local files, so the machine can be disconnected first.
     assertBenchReady(".");
+    // A preflight-only pass times nothing, so there would be nothing to publish:
+    // refuse here rather than after the run, on records that predate it.
+    if (preflightOnly()) {
+      throw new Error(
+        "BENCH_PREFLIGHT_ONLY is set — unset it to publish a run, or use `pnpm run preflight` for the check alone",
+      );
+    }
     await prepareTsv();
     const harness = await describeHarness();
     const runStartedAt = Date.now();

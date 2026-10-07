@@ -51,6 +51,9 @@ let record = null;
 let resolvedRunCounts = null;
 
 function beginRecord(title) {
+  // A preflight-only pass measures nothing, so it starts no record and leaves
+  // the last run's in `results/` as they were.
+  if (PREFLIGHT_ONLY) return;
   const name = title.replace(/^Benchmarking /, "");
   record = {
     // the scenario directory, which `setupCwd` has already made the cwd
@@ -65,10 +68,8 @@ function beginRecord(title) {
     target: "",
     corpus: "",
     // Seeded from `benchRunCounts` rather than left for hyperfine's argv to fill:
-    // preflight aborts a scenario without ever reaching hyperfine, and for
-    // `bench-svelte` that is the *common* outcome, so the record it publishes most
-    // often would otherwise report the runs it printed as 0. Still 0 in upstream's
-    // three scenarios until hyperfine finishes; they hard-code their counts.
+    // preflight aborts a scenario without ever reaching hyperfine, and the record
+    // it publishes then would otherwise report the runs it printed as 0.
     warmup_runs: resolvedRunCounts?.[0] ?? 0,
     benchmark_runs: resolvedRunCounts?.[1] ?? 0,
     // filled by `printRunCounts`, so it is present exactly in the scenarios that
@@ -528,6 +529,24 @@ export function benchRunCounts(warmupDefault, runsDefault) {
  */
 const SETTLE_SECONDS = readRunCount("BENCH_SETTLE_S", 10, 0);
 
+/**
+ * `BENCH_PREFLIGHT_ONLY=1`: stop each scenario once its preflight has passed,
+ * before anything is timed.
+ *
+ * Which files a formatter accepts is settled by what is pinned — the lockfile
+ * and the corpus commits — not by anything a run measures, so it can be asked
+ * when either moves rather than found partway through the next full run:
+ * `pnpm run preflight` covers every scenario in the time one of them takes to
+ * benchmark. Such a pass resets each corpus as a run does and holds the run
+ * lock, but times nothing and records nothing.
+ */
+const PREFLIGHT_ONLY = readSwitch("BENCH_PREFLIGHT_ONLY");
+
+/** Whether this is a preflight-only pass (`BENCH_PREFLIGHT_ONLY=1`). */
+export function preflightOnly() {
+  return PREFLIGHT_ONLY;
+}
+
 /** The `--setup` argument pair for `SETTLE_SECONDS`, or nothing when it is off. */
 export function settleArgs() {
   return SETTLE_SECONDS > 0 ? ["--setup", `sleep ${SETTLE_SECONDS}`] : [];
@@ -552,8 +571,8 @@ export function settleArgs() {
  */
 export function printRunCounts() {
   if (resolvedRunCounts === null) {
-    // upstream's three scenarios hard-code their counts and call neither this nor
-    // `benchRunCounts`; a settling scenario that skipped it would print counts
+    // upstream's three scenarios print their own counts line and never call
+    // this; a settling scenario that skipped `benchRunCounts` would print counts
     // nothing resolved
     throw new Error("printRunCounts() before benchRunCounts() resolved the counts");
   }
@@ -575,6 +594,16 @@ function readRunCount(name, fallback, min) {
     process.exit(1);
   }
   return value;
+}
+
+function readSwitch(name) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "" || raw === "0") return false;
+  if (raw === "1") return true;
+  // Exit rather than guess, as `readRunCount` does: a value read as off would
+  // start the full benchmark this was set to skip.
+  console.error(`${name} must be 1 or 0, got ${JSON.stringify(raw)}`);
+  process.exit(1);
 }
 
 export function createFormatters(projectRoot, configDir) {
@@ -810,20 +839,31 @@ export function assertScopeConfigsAgree(configDir) {
 // on stderr/stdout with the path in a tool-specific shape, so preflight needs one
 // matcher per tool rather than a shared format.
 
-// A path in one of the extensions any formatter here is pointed at. Matchers
-// whose prefix is not unique to a diagnostic line anchor on this: prettier
-// echoes the offending source lines under the same `[error] ` prefix, so an
-// unanchored capture reads `[error]   1 | const o = { alpha: 1 }` as a rejected
-// file named "  1 | const o = { alpha" — inflating the count with garbage paths
-// on exactly the corpus preflight exists to catch.
+// A path in one of the extensions tsv formats. Its diagnostics anchor on this so
+// a pathless one can never register as a file.
 const SOURCE_PATH = String.raw`.+?\.(?:[cm]?[jt]sx?|svelte|css)`;
 
 const TSV_DIAGNOSTIC = new RegExp(String.raw`^error: (${SOURCE_PATH}): `, "gm");
 
+// A path as prettier prints one: anything ending in an extension, with no `|` in
+// it. prettier's prefixes are not unique to the lines that name a file, so both
+// its patterns anchor on this. It echoes the offending source under the same
+// `[error] ` prefix, and an unanchored capture reads
+// `[error]   1 | const o = { alpha: 1 }` as a rejected file named
+// "  1 | const o = { alpha" — garbage paths on exactly the corpus preflight
+// exists to catch; every echoed line carries the code frame's `|` gutter, which
+// no path does. Its `[warn] ` summary sentence ends in a full stop rather than
+// an extension. Any extension, not a list of them: the embedded scenarios point
+// prettier at Markdown, JSON, YAML, Vue and the rest, and a file left out of a
+// list would go uncounted and, rejected, unnamed.
+const PRETTIER_PATH = String.raw`[^|\n]+?\.\w+`;
+
+const PRETTIER_DIAGNOSTIC = new RegExp(String.raw`^\[error\] (${PRETTIER_PATH}): `, "gm");
+
 const PREFLIGHT_MATCHERS = {
   // [error] path: SyntaxError: ...
-  prettier: new RegExp(String.raw`^\[error\] (${SOURCE_PATH}): `, "gm"),
-  "prettier+oxc-parser": new RegExp(String.raw`^\[error\] (${SOURCE_PATH}): `, "gm"),
+  prettier: PRETTIER_DIAGNOSTIC,
+  "prettier+oxc-parser": PRETTIER_DIAGNOSTIC,
   biome: /^(.+?):\d+:\d+ parse /gm, // path:1:11 parse ━━━━━
   oxfmt: /,-\[(.+?):\d+:\d+\]/g, // miette snippet header
   // error: path: message — continuation lines carry no `error: ` prefix, but
@@ -872,8 +912,9 @@ const TSV_SCOPE_COUNTS = {
 const PREFLIGHT_SCOPE_COUNTS = {
   // Counted from prettier's one-line-per-file `[warn] path` output rather than its
   // summary sentence, which has two shapes ("in N files" / "in the above file")
-  // and none at all when there is nothing to change. Anchored on a source
-  // extension so the summary line itself — same `[warn] ` prefix — isn't counted.
+  // and none at all when there is nothing to change. Anchored on a path
+  // (`PRETTIER_PATH`) so the summary line itself — same `[warn] ` prefix — isn't
+  // counted.
   prettier: { changed: countPrettierWarnings },
   "prettier+oxc-parser": { changed: countPrettierWarnings },
   biome: {
@@ -893,7 +934,7 @@ const PREFLIGHT_SCOPE_COUNTS = {
   },
 };
 
-const PRETTIER_WARNED_FILE = new RegExp(String.raw`^\[warn\] (${SOURCE_PATH})$`, "gm");
+const PRETTIER_WARNED_FILE = new RegExp(String.raw`^\[warn\] (${PRETTIER_PATH})$`, "gm");
 
 function countPrettierWarnings(output) {
   const warned = [...output.matchAll(PRETTIER_WARNED_FILE)].length;
@@ -915,8 +956,8 @@ function readCount(spec, output) {
 // command can fail at the command level rather than per file — an unresolvable
 // plugin, a bad config, a path that matched nothing — and every such failure
 // leaves the matcher above with nothing to capture, so the formatter reads as
-// clean and is then timed doing no work at all. With `--ignore-failure` that
-// posts as an extraordinary speed.
+// clean. One that also exits 0 is then timed doing no work at all, and posts an
+// extraordinary speed.
 //
 // Only tools whose error prefix is unambiguous in check mode are listed. biome
 // calls formatting diffs "errors" and oxfmt's failure text names no file, so
@@ -943,11 +984,12 @@ const PREFLIGHT_ERROR_SIGNALS = {
  * Confirm every formatter accepts the whole corpus before any of them is timed,
  * and abort the scenario if one does not.
  *
- * Without this, a formatter that *errors* on part of the corpus is still timed
- * (hyperfine runs with `--ignore-failure`), so rejecting files reads as speed.
- * The tools disagree on real corpora — tsv has no JSX parser, so a `.js` file
- * carrying JSX is a parse error for tsv and ordinary input for prettier, biome,
- * and oxfmt.
+ * Without this, a formatter that *errors* on part of the corpus either fails its
+ * timed run or — under hyperfine's `--ignore-failure`, which upstream's scenarios
+ * carried — is timed anyway, so rejecting files reads as speed. The tools
+ * disagree on real corpora: tsv has no JSX parser, so a `.js` file carrying JSX
+ * is a parse error for tsv and ordinary input for prettier, biome, and oxfmt;
+ * oxfmt refuses ES module syntax in a `.cjs` file that prettier formats.
  *
  * Rejections are not filtered out and the run continued: the three formatters
  * are scoped by three separate mechanisms (`prettierignore`, oxfmt
@@ -958,6 +1000,9 @@ const PREFLIGHT_ERROR_SIGNALS = {
  *
  * Also cross-checks scope: every formatter that reports a file count must report
  * the same one, and every formatter must have at least one file to change.
+ *
+ * In a preflight-only pass (`BENCH_PREFLIGHT_ONLY`) a clean result ends the
+ * process, exit 0, rather than returning to a caller about to time something.
  *
  * Returns `{failures, excluded, unavailable, crashed, unmatched, errored,
  * counts}` on a clean pass. Reports everything it found before
@@ -1114,13 +1159,17 @@ export function runPreflight(checks, { quiet = false } = {}) {
   if (unmatched.length > 0) problems.push(`no diagnostic matcher: ${unmatched.join(", ")}`);
   if (errored.length > 0) problems.push(`errored without naming a file: ${errored.join(", ")}`);
 
+  // The count rules below read each formatter's summary, which one that rejected
+  // a file may not have printed (oxfmt prints none after an error). Its rejection
+  // has already failed the scenario, so it sits them out rather than adding a
+  // second, misleading reason under the real one.
+  const summarized = Object.entries(counts).filter(([name]) => failures[name].length === 0);
+
   // Every formatter must have work to do. A count that didn't parse is treated as
   // no work rather than waved through — for prettier that IS the zero-scope
   // report ("All matched files use Prettier code style!"), and for the others it
   // means the line changed shape and the number can't be trusted.
-  const idle = Object.entries(counts)
-    .filter(([, c]) => !c.changed)
-    .map(([name]) => name);
+  const idle = summarized.filter(([, c]) => !c.changed).map(([name]) => name);
   if (idle.length > 0) {
     log(
       `  → ${idle.join(", ")} found nothing to change — either mis-scoped, or about to be timed doing no work`,
@@ -1129,7 +1178,7 @@ export function runPreflight(checks, { quiet = false } = {}) {
   }
 
   // Every formatter that reports a file count must report the same one.
-  const scopes = Object.entries(counts).filter(([, c]) => c.reportsConsidered);
+  const scopes = summarized.filter(([, c]) => c.reportsConsidered);
   const unreadable = scopes.filter(([, c]) => c.considered === null).map(([name]) => name);
   if (unreadable.length > 0) {
     problems.push(`file count unreadable: ${unreadable.join(", ")}`);
@@ -1181,6 +1230,12 @@ export function runPreflight(checks, { quiet = false } = {}) {
   // formatter in the scenario reports one.
   if (record && !quiet && sizes.size === 1) record.files = [...sizes][0];
 
+  // Never for the self-test's `quiet` passes, which have more checks to make.
+  if (PREFLIGHT_ONLY && !quiet) {
+    log("  → preflight only (BENCH_PREFLIGHT_ONLY): stopping before any timing");
+    process.exit(0);
+  }
+
   return report;
 }
 
@@ -1194,6 +1249,15 @@ export function runPreflight(checks, { quiet = false } = {}) {
  * precision and the run counts the scenario actually passed.
  */
 export function runHyperfine(args) {
+  // A scenario's preflight ends a preflight-only pass before this; one that got
+  // here ran none, and timing it is not what was asked for.
+  if (PREFLIGHT_ONLY) {
+    return Promise.reject(
+      new Error(
+        "BENCH_PREFLIGHT_ONLY is set, but this scenario reached timing without a preflight",
+      ),
+    );
+  }
   const exportPath = join(tmpdir(), `bench-formatter-hyperfine-${process.pid}.json`);
   return new Promise((resolve, reject) => {
     const fail = (error) => {
@@ -1475,9 +1539,9 @@ export function checkGnuTime() {
 // command died from a signal in, which are excluded: the peak RSS of a process
 // that was killed partway is not the cost of the job, and a SIGABRT (rsvelte-fmt
 // has one, on a shared stdout/stderr pipe) would otherwise average in
-// unremarked. A run that exits non-zero on its own — a formatter erroring on
-// some file, which the timed pass tolerates too under `--ignore-failure` — did
-// the whole job, so its peak counts.
+// unremarked. A run that exits non-zero on its own did the whole job, so its
+// peak counts; the timed pass before this one has no `--ignore-failure`, so a
+// formatter that exits that way every run has failed the scenario already.
 async function measureMemory(name, command, prepareCmd, runs) {
   if (!gnuTimeBinary) {
     return null;

@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import {
   assertBenchReady,
   clearResults,
+  preflightOnly,
   runLockEnv,
   runLockStdio,
   takeRunLock,
@@ -79,20 +80,43 @@ async function main() {
   );
   console.log("");
 
+  // `BENCH_PREFLIGHT_ONLY=1` (`pnpm run preflight`): every scenario stops once
+  // its preflight has passed, so this asks only whether each formatter still
+  // accepts its corpus — the question to put after a dependency or corpus bump,
+  // without the full run it would otherwise take to find out.
+  if (preflightOnly()) {
+    console.log("Preflight only: each scenario's corpus check, with nothing timed or recorded");
+    console.log("");
+  }
+
   await runPreflightSelfTest();
   console.log("");
 
   // Each scenario leaves a record in `results/`; start from none, so whatever
   // composes them afterwards reads one run and not the leftovers of another.
-  clearResults();
+  // A preflight-only pass records nothing, and leaves the last run's alone.
+  if (!preflightOnly()) clearResults();
 
+  const failed = [];
   for (const scenario of scenarios) {
     try {
       await runScenario(scenario);
     } catch (e) {
       console.error(`Error running ${scenario}: ${e.message}`);
+      failed.push(scenario);
     }
     console.log("");
+  }
+
+  // A preflight-only pass is a check, so it answers with its exit status; a
+  // benchmark run publishes an aborted scenario as one and carries on.
+  if (preflightOnly()) {
+    console.log(
+      failed.length > 0
+        ? `Preflight failed: ${failed.join(", ")}`
+        : "Preflight passed: every formatter accepts every scenario's corpus",
+    );
+    process.exit(failed.length > 0 ? 1 : 0);
   }
 
   console.log("=========================================");
