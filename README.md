@@ -18,13 +18,14 @@ Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfm
 - [Biome](https://biomejs.dev/) Formatter
 - [Oxfmt](https://oxc.rs)
 - [rsvelte-fmt](https://github.com/baseballyama/rsvelte) (`@rsvelte/fmt`, Svelte scenario only)
-- [tsv](https://tsv.fuz.dev/), as up to three rows — one per way of running it:
+- [tsv](https://tsv.fuz.dev/), as up to five rows — one per way of running it:
 
-| Row        | What is timed                                                                                                                                                   | Scenarios                 |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `tsv`      | the native binary, run directly                                                                                                                                 | every tsv scenario        |
-| `tsv-npm`  | the same binary, started the way an npm install starts it (`npx tsv`, a `package.json` script): `@fuzdev/tsv`'s `tsv` bin, a Node script that spawns the binary | every tsv scenario        |
-| `tsv-wasm` | the same CLI contract, mirrored in JS over a WASM engine in Node (`@fuzdev/tsv-wasm`) — the package for platforms with no prebuilt binary                       | `bench-tsv-delivery` only |
+| Row                            | What is timed                                                                                                                                                   | Scenarios                 |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `tsv`                          | the native binary, run directly                                                                                                                                 | every tsv scenario        |
+| `tsv-npm`                      | the same binary, started the way an npm install starts it (`npx tsv`, a `package.json` script): `@fuzdev/tsv`'s `tsv` bin, a Node script that spawns the binary | every tsv scenario        |
+| `tsv-wasm`                     | the same CLI contract, mirrored in JS over a WASM engine in Node (`@fuzdev/tsv-wasm`) — the package for platforms with no prebuilt binary                       | `bench-tsv-delivery` only |
+| `tsv-npm-bun` / `tsv-wasm-bun` | `tsv-npm` and `tsv-wasm` on Bun instead of Node (`bunx --bun tsv`)                                                                                              | `bench-tsv-delivery` only |
 
 `tsv` and `tsv-npm` do identical formatting work in the same binary. The only
 difference is the launch in front of `tsv-npm`, a fixed ~30 ms in the results

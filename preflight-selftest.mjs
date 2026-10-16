@@ -190,6 +190,21 @@ function buildCases(formatters) {
       detectsCommandErrors: true,
       reportsConsidered: true,
     },
+    // The two rows above on Bun's runtime. The scripts are the same files, but
+    // the runtime under them is not: a Node API Bun implements differently would
+    // show here as output the shared entries no longer read.
+    {
+      name: "tsv-wasm-bun",
+      command: (f) => formatters.check["tsv-wasm-bun"](f),
+      detectsCommandErrors: true,
+      reportsConsidered: true,
+    },
+    {
+      name: "tsv-npm-bun",
+      command: (f) => formatters.check["tsv-npm-bun"](f),
+      detectsCommandErrors: true,
+      reportsConsidered: true,
+    },
   ];
 
   return [

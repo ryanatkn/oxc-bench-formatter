@@ -9,7 +9,8 @@
 // `@fuzdev/tsv-wasm`, which runs the same CLI contract, mirrored in JS, over a
 // WASM engine in Node and is the universal fallback on platforms with no
 // prebuilt binary. Same formatter, same output — three very different
-// deliveries.
+// deliveries. The two JS ones run a second time on Bun's runtime (`bunx --bun`),
+// so the Node rows have a counterpart on the other runtime npm users reach for.
 //
 // That question is deliberately kept out of the comparison scenarios. A row
 // belongs there if it is the honest counterpart to how the *other* tools in that
@@ -70,16 +71,23 @@ async function main() {
   console.log("- Copy original before each run");
   console.log("");
 
-  // The three rows share one CLI contract, so they share preflight's tsv matchers
+  // Every row shares one CLI contract, so they share preflight's tsv matchers
   // and must report identical counts — which makes the scope cross-check a real
-  // assertion that all of them are formatting the same file, not three spellings
+  // assertion that all of them are formatting the same file, not five spellings
   // of one tool trivially agreeing. The npm row's preflight also catches the
   // dispatcher falling back to the JS CLI, which would otherwise be timed under
-  // the wrong name. Both Node rows run through a pnpm-shaped bin shim, as the
-  // other tools' rows do everywhere else (`resolveTsvNodeBin`), so the gaps here
-  // are what `tsv` costs from a package.json script, shim included.
+  // the wrong name, and so does the Bun row's. Both Node rows run through a
+  // pnpm-shaped bin shim, as the other tools' rows do everywhere else
+  // (`resolveTsvNodeBin`), so the gaps here are what `tsv` costs from a
+  // package.json script, shim included. The Bun rows take no shim: a Bun install
+  // links bins as bare symlinks.
   await benchRows(
     [
+      {
+        name: "tsv-wasm-bun",
+        command: formatters["tsv-wasm-bun"](dataFile),
+        check: formatters.check["tsv-wasm-bun"](dataFile),
+      },
       {
         name: "tsv-wasm",
         command: formatters["tsv-wasm"](dataFile),
@@ -89,6 +97,11 @@ async function main() {
         name: "tsv-npm",
         command: formatters["tsv-npm"](dataFile),
         check: formatters.check["tsv-npm"](dataFile),
+      },
+      {
+        name: "tsv-npm-bun",
+        command: formatters["tsv-npm-bun"](dataFile),
+        check: formatters.check["tsv-npm-bun"](dataFile),
       },
       { name: "tsv", command: formatters.tsv(dataFile), check: formatters.check.tsv(dataFile) },
     ],

@@ -26,11 +26,14 @@ A benchmark suite comparing JS/TS formatters on **execution time** (via
   run it. Runs beside native tsv in every scenario tsv appears in: in
   `bench-ts-only`, `bench-large-single-file` and `bench-svelte` it is tsv on the
   same footing as the other tools' Node bins, in `bench-tsv-delivery` one of the
-  three distributions. Also fork-added.
+  distributions. Also fork-added.
 - **tsv-wasm** (`@fuzdev/tsv-wasm`) — tsv's CLI contract, mirrored in JS, over a
   WASM engine in Node; the distribution anyone on a platform without a prebuilt
   native binary falls back to. Runs only in `bench-tsv-delivery`, against native
   tsv. Also fork-added.
+- **tsv-npm-bun / tsv-wasm-bun** — the two rows above on Bun's runtime (the
+  pinned `bun` devDependency), what `bunx --bun tsv` runs. Only in
+  `bench-tsv-delivery`. See "The Bun rows".
 
 This suite measures the whole **CLI** (process spawn + I/O + multi-file parallel
 batch + RSS). A complementary fork,
@@ -52,7 +55,8 @@ is upstream's, untouched.
 
 - **Three formatters added**: tsv (the native binary from `@fuzdev/tsv`'s
   platform package, or `TSV_BIN`), rsvelte-fmt, and tsv-wasm — plus a tsv-npm
-  row that is tsv again through its Node dispatcher.
+  row that is tsv again through its Node dispatcher, and tsv-npm-bun /
+  tsv-wasm-bun, the two JS entry points on Bun.
 - **Three scenarios added**: `bench-ts-only`, `bench-svelte`,
   `bench-tsv-delivery` — plus their entries in `bench-all.mjs` and `init.sh`.
 - **`bench-large-single-file`** (upstream's) gained a tsv row and a tsv-npm row,
@@ -108,9 +112,9 @@ is upstream's, untouched.
   `./init.sh` when a corpus is missing; here it stops with `assertBenchReady`, so
   the one networked step stays outside the benchmark (see Running). `package.json`
   gained a `setup` script and both workflows an explicit `./init.sh` step.
-- **Tooling**: `.node-version` pinned to 24, `@rsvelte/fmt`, `@fuzdev/tsv` and
-  `@fuzdev/tsv-wasm` added (with `@fuzdev/*` excluded from pnpm's release-age
-  wait), and a root `.formatignore` that re-includes the two
+- **Tooling**: `.node-version` pinned to 24, `@rsvelte/fmt`, `@fuzdev/tsv`,
+  `@fuzdev/tsv-wasm` and `bun` added (with `@fuzdev/*` excluded from pnpm's
+  release-age wait, and `bun`'s postinstall off in `allowBuilds`), and a root `.formatignore` that re-includes the two
   single-file corpora for tsv (see "Why the corpus must stay a git repo").
 
 ## Layout
@@ -132,7 +136,7 @@ bench-formatter/
 ├── bench-full-features/
 ├── bench-ts-only/                   # non-JSX scenario added by this fork (all 5 formatters incl. tsv, plus tsv-npm)
 ├── bench-svelte/                    # Svelte scenario added by this fork (tsv + tsv-npm vs rsvelte-fmt only)
-├── bench-tsv-delivery/              # what each tsv distribution costs (native vs WASM), fork-added
+├── bench-tsv-delivery/              # what each tsv distribution costs (native, npm, WASM; Node and Bun), fork-added
 ├── vite.config.ts / pnpm-workspace.yaml  # vite-plus tooling + catalog
 └── .github/workflows/               # ci.yml, security, update-readme
 ```
@@ -177,6 +181,9 @@ all, since all of its rows are tsv and tsv is non-configurable.
     wherever native tsv does. `"tsv-wasm"` is the same shape over
     `.bin/bench-tsv-wasm`. Both bins are shims the harness derives from pnpm's
     own — `resolveTsvNodeBin`, see "The tsv-npm row".
+  - `"tsv-npm-bun"` / `"tsv-wasm-bun"` → `<bunBin> <script> format <files>` — the
+    same two scripts, by path, on the Bun binary `resolveBun` finds in the
+    `bun` devDependency's platform package. See "The Bun rows".
   - `rsvelte(files)` → `… --config <dir>/oxfmtrc.json <files>` — the
     `@rsvelte/fmt` npm bin (a Node launcher that execs a platform-native binary
     and points it at the project's oxfmt for non-`.svelte` files). Configurable,
@@ -261,7 +268,10 @@ all, since all of its rows are tsv and tsv is non-configurable.
   nothing.
 - **`setupCwd(import.meta.url)`** — each `bench.mjs` chdirs into its own dir so
   relative config/data paths resolve. Takes the run lock first, being every
-  scenario's first call.
+  scenario's first call, then checks that scenario's own setup
+  (`assertBenchReady` narrowed to its directory), so a scenario run directly on
+  an unprepared checkout names `./init.sh` rather than failing at its first
+  reset.
 - **`assertBenchReady(projectRoot)`** / **`missingBenchSetup`** — the gate
   `bench-all.mjs` and `update-readme` open with (dependencies, the seven
   corpora, each cloned one at its pinned commit, hyperfine), and the list behind it, which `init.sh` closes on too
@@ -282,15 +292,15 @@ all, since all of its rows are tsv and tsv is non-configurable.
 
 ## Scenarios
 
-| Dir                       | Corpus                                                                         | Reset / prepare                                                                          | warmup × runs | Formatters run             |
-| ------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------- | -------------------------- |
-| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                       | `cp parser.ts.bak parser.ts`                                                             | 3 × 20        | all 5 (incl. tsv), tsv-npm |
-| `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                  | `resetCorpusCommand`                                                                     | 3 × 10        | all 4 (no tsv — JSX/TSX)   |
-| `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)         | `resetCorpusCommand` + rm stray prettier configs + rm rejected files                     | 1 × 3         | prettier+oxc, oxfmt        |
-| `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)  | `resetCorpusCommand` + strip a tailwind `require` + rm `.prettierrc` + rm rejected files | 1 × 3         | prettier+oxc, oxfmt        |
-| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset                  | `resetCorpusCommand` (its own outline checkout)                                          | 3 × 10        | all 5 (incl. tsv), tsv-npm |
-| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section) | `resetCorpusCommand` (snapshot repo built by `setup-corpus.mjs`)                         | 3 × 10        | tsv, tsv-npm, rsvelte-fmt  |
-| `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                   | `cp parser.ts.bak parser.ts`                                                             | 3 × 20        | tsv, tsv-npm, tsv-wasm     |
+| Dir                       | Corpus                                                                         | Reset / prepare                                                                          | warmup × runs | Formatters run                      |
+| ------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------- | ----------------------------------- |
+| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                       | `cp parser.ts.bak parser.ts`                                                             | 3 × 20        | all 5 (incl. tsv), tsv-npm          |
+| `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                  | `resetCorpusCommand`                                                                     | 3 × 10        | all 4 (no tsv — JSX/TSX)            |
+| `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)         | `resetCorpusCommand` + rm stray prettier configs + rm rejected files                     | 1 × 3         | prettier+oxc, oxfmt                 |
+| `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)  | `resetCorpusCommand` + strip a tailwind `require` + rm `.prettierrc` + rm rejected files | 1 × 3         | prettier+oxc, oxfmt                 |
+| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset                  | `resetCorpusCommand` (its own outline checkout)                                          | 3 × 10        | all 5 (incl. tsv), tsv-npm          |
+| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section) | `resetCorpusCommand` (snapshot repo built by `setup-corpus.mjs`)                         | 3 × 10        | tsv, tsv-npm, rsvelte-fmt           |
+| `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                   | `cp parser.ts.bak parser.ts`                                                             | 3 × 20        | tsv, tsv-npm, tsv-wasm, both on Bun |
 
 **Quick runs**: every scenario takes `BENCH_WARMUP` / `BENCH_RUNS` overrides via
 `benchRunCounts`, so a change to the harness can be smoke-tested in a fraction
@@ -333,7 +343,7 @@ error it attributes to no file — each must read as "unknown coverage", never a
 clean. That last one is the plugin-and-config case: prettier with an unresolvable
 plugin, or any tool handed a path that matched nothing, exits non-zero having
 formatted nothing, and would then be timed doing no work at all. Only prettier,
-prettier+oxc-parser, and tsv are covered (`PREFLIGHT_ERROR_SIGNALS`) — biome calls
+prettier+oxc-parser, and tsv's rows are covered (`PREFLIGHT_ERROR_SIGNALS`) — biome calls
 formatting diffs "errors" and oxfmt's failure text names no file, so neither has a
 signal that couldn't fire on an ordinary run.
 
@@ -684,7 +694,8 @@ dirty ignores `README.md` and `results.json`, a previous run's output),
 as tsv's own bench reports write it — the site checks the two agree),
 `node_startup`, `versions` keyed by formatter name plus
 `@prettier/plugin-oxc` (the prettier+oxc-parser row's plugin) and the `node` the
-Node-launched rows ran on (tsv's a bare version), `tsv_binary` (where the native
+Node-launched rows ran on and the `bun` the Bun rows ran on (tsv's a bare
+version), `tsv_binary` (where the native
 tsv rows' binary came from: the platform package, or a dated `TSV_BIN` build),
 and one record per scenario in run order — `id` (the slug of the
 banner title, which that site keys its per-scenario copy on), `name`, `target`,
@@ -882,7 +893,7 @@ Candidates:
   scoped alike. prettier's check output names only the files it would change;
   today oxfmt's count there has nothing to be compared with.
 - Command-level error signals for biome and oxfmt. `PREFLIGHT_ERROR_SIGNALS` covers
-  prettier, tsv, and tsv-wasm; the other two have no error prefix that couldn't fire on an
+  prettier and every tsv row; the other two have no error prefix that couldn't fire on an
   ordinary check run, so a failure that formats nothing still reads as clean there.
   A file-count assertion ("the tool reported looking at ≥ 1 files") would cover all
   of them, at the cost of another per-tool matcher to keep alive.
@@ -1092,6 +1103,35 @@ without a prebuilt native binary falls back to. It runs in one scenario,
 - **Quick runs**: `BENCH_WARMUP=0 BENCH_RUNS=1 BENCH_SETTLE_S=0 node ./bench-tsv-delivery/bench.mjs`,
   as in the other three tsv scenarios.
 
+## The Bun rows (bench-tsv-delivery)
+
+`tsv-npm-bun` and `tsv-wasm-bun` run the same two scripts as tsv-npm and
+tsv-wasm — `@fuzdev/tsv/bin.js` and `@fuzdev/tsv-wasm/cli.js` — on Bun instead
+of Node, so the delivery scenario answers "and on the other runtime?" too.
+
+- **Binary**: `resolveBun` (`shared/utils.mjs`) resolves the `@oven/bun-<triple>`
+  package the `bun` devDependency installed, the way `resolveTsv` resolves tsv's
+  — pinned by the lockfile, never a `bun` on PATH. `bun`'s postinstall only
+  copies that binary into place, so `allowBuilds` leaves it off.
+- **`--bun`, not plain `bunx`**: `bunx tsv` honours the scripts'
+  `#!/usr/bin/env node` shebang and runs Node — the existing rows. The Bun rows
+  are `bun <script>`, which is `bunx --bun`.
+- **No shim**: they're addressed by path. That is not the edge it would be for the
+  Node rows: a Bun install links bins as bare symlinks, so Bun users pay no
+  wrapper script either.
+- **Preflight**: they share tsv's matcher and count entries; Bun's own failures
+  print under the same `error: ` prefix. Each has its own self-test case, since
+  the runtime under the shared scripts differs.
+- **Reading the memory rows**: as with tsv-npm, GNU time reports the largest
+  single process, so `tsv-npm-bun` is the Bun dispatcher's peak (~20 MB, under
+  Node's ~50) with the native binary hidden under it, and `tsv-wasm-bun` is the
+  whole Bun process, heap plus the wasm instance's linear memory. Its User time
+  runs well above wall on one file for the same reason tsv-wasm's does: the
+  engine tiers wasm up on background threads.
+- **Version**: the resolved binary's `--version`, published as `**Bun**` and
+  `versions.bun` in `results.json` — a new key that tsv.fuz.dev's schema has to
+  learn before it reads a run that carries it.
+
 ## The tsv-npm row
 
 Not another build of tsv but another
@@ -1114,8 +1154,8 @@ It runs in all four tsv scenarios, for two reasons:
   them; native tsv stays as the engine-side figure and the baseline every ratio
   is taken against, so hyperfine's `Summary` and the memory ratios keep their
   anchor across regenerations.
-- **`bench-tsv-delivery`** — as one of the three distributions, against native
-  tsv and tsv-wasm.
+- **`bench-tsv-delivery`** — as one of the distributions, against native tsv,
+  tsv-wasm, and both on Bun.
 
 - **Binary**: `node_modules/.bin/bench-tsv-npm`, a harness-derived bin shim
   over `@fuzdev/tsv/bin.js` (see the shim entry below for why it isn't

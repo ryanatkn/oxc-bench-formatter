@@ -45,7 +45,7 @@ else
 	echo "parser.ts already exists"
 fi
 
-# The same parser.ts for bench-tsv-delivery (tsv native vs WASM). Its own copy,
+# The same parser.ts for bench-tsv-delivery (each tsv distribution). Its own copy,
 # like bench-ts-only's second Outline clone, so each scenario resets its own tree
 # rather than sharing a corpus with a scenario that also rewrites it. Copied from
 # the download above when it's there — the URL is pinned to v5.9.2, so the copy

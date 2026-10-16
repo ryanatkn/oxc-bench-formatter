@@ -147,7 +147,9 @@ function ratioOf(result, baseline) {
  *
  * Always returns a path: when nothing resolves, one that does not exist under the
  * package's directory, so a scenario's preflight reports tsv unavailable with a
- * path in the message rather than running whatever `tsv` is on PATH.
+ * path in the message rather than running whatever `tsv` is on PATH. The path
+ * is spelled shell-safe because it lands unquoted in a command string: an `<` or
+ * `>` in it would parse as a redirection, not fail to launch with exit 127.
  */
 export function resolveTsv(projectRoot) {
   if (process.env.TSV_BIN) {
@@ -160,7 +162,7 @@ export function resolveTsv(projectRoot) {
     realPath = realpathSync(packageJson);
     manifest = JSON.parse(readFileSync(realPath, "utf8"));
   } catch {
-    return { bin: `${projectRoot}/node_modules/@fuzdev/tsv/<not installed>/tsv`, source: null };
+    return { bin: `${projectRoot}/node_modules/@fuzdev/tsv/not-installed/tsv`, source: null };
   }
   const require = createRequire(realPath);
   const exe = process.platform === "win32" ? "tsv.exe" : "tsv";
@@ -176,9 +178,44 @@ export function resolveTsv(projectRoot) {
     }
   }
   return {
-    bin: `${dirname(realPath)}/<no platform package for ${process.platform}-${process.arch}>/tsv`,
+    bin: `${dirname(realPath)}/no-platform-package-for-${process.platform}-${process.arch}/tsv`,
     source: null,
   };
+}
+
+/**
+ * The Bun runtime the `-bun` rows run tsv's JS entry points on, from the
+ * `@oven/bun-<triple>` package the `bun` devDependency installed for this
+ * machine — pinned by the lockfile like every formatter, and resolved the way
+ * `resolveTsv` resolves tsv's, so the package's postinstall (which only copies
+ * that same binary into place) never has to run.
+ *
+ * Always returns a path: when nothing resolves, one that does not exist, so the
+ * rows' preflight reports Bun unavailable rather than running whatever `bun` is
+ * on PATH at whatever version — spelled shell-safe, as `resolveTsv`'s is.
+ */
+export function resolveBun(projectRoot) {
+  const missing = `${projectRoot}/node_modules/bun/no-platform-package-for-${process.platform}-${process.arch}/bun`;
+  let realPath;
+  let manifest;
+  try {
+    realPath = realpathSync(`${projectRoot}/node_modules/bun/package.json`);
+    manifest = JSON.parse(readFileSync(realPath, "utf8"));
+  } catch {
+    return missing;
+  }
+  const require = createRequire(realPath);
+  const exe = process.platform === "win32" ? "bun.exe" : "bun";
+  for (const name of Object.keys(manifest.optionalDependencies ?? {})) {
+    let bin;
+    try {
+      bin = join(dirname(require.resolve(`${name}/package.json`)), "bin", exe);
+    } catch {
+      continue;
+    }
+    if (existsSync(bin)) return bin;
+  }
+  return missing;
 }
 
 /** tsv's two Node-launched distributions: the package and the script its `tsv` bin names. */
@@ -320,6 +357,7 @@ export function setupCwd(importMetaUrl) {
   // a record started, and without a line of its own in upstream's scenarios.
   takeRunLock();
   const __dirname = dirname(fileURLToPath(importMetaUrl));
+  assertBenchReady(CHECKOUT, basename(__dirname));
   process.chdir(__dirname);
 }
 
@@ -456,16 +494,22 @@ const REQUIRED_CORPORA = [
  * hyperfine is on it because
  * every scenario needs it — GNU time is not, since without it only the memory
  * pass is skipped.
+ *
+ * @param {string} [projectRoot]
+ * @param {string | null} [scenario] a `bench-*` directory name, to check only its corpus
  */
-export function missingBenchSetup(projectRoot = ".") {
+export function missingBenchSetup(projectRoot = ".", scenario = null) {
   const missing = [];
   if (!existsSync(join(projectRoot, "node_modules"))) {
     missing.push("node_modules/ — dependencies not installed (pnpm install)");
   }
+  // Both lists lead with the scenario's own directory, so one scenario's check
+  // is the same lines filtered.
+  const ours = (line) => scenario === null || line.startsWith(`${scenario}/`);
   for (const [path, what] of REQUIRED_CORPORA) {
-    if (!existsSync(join(projectRoot, path))) missing.push(`${path} — ${what}`);
+    if (ours(path) && !existsSync(join(projectRoot, path))) missing.push(`${path} — ${what}`);
   }
-  missing.push(...unpinnedCorpora(projectRoot));
+  missing.push(...unpinnedCorpora(projectRoot).filter(ours));
   if (spawnSync("hyperfine", ["--version"]).error) {
     missing.push(
       "hyperfine — not on PATH, and not something init.sh installs (apt/brew install hyperfine)",
@@ -479,10 +523,12 @@ export function missingBenchSetup(projectRoot = ".") {
  * command that fetches it.
  *
  * Exits rather than throws, and lists every missing piece rather than the first,
- * so a single online `./init.sh` clears the lot.
+ * so a single online `./init.sh` clears the lot. With `scenario` (a `bench-*`
+ * directory name) only that scenario's corpus is checked — what `setupCwd` asks,
+ * so a scenario run directly fails here rather than at its first reset.
  */
-export function assertBenchReady(projectRoot = ".") {
-  const missing = missingBenchSetup(projectRoot);
+export function assertBenchReady(projectRoot = ".", scenario = null) {
+  const missing = missingBenchSetup(projectRoot, scenario);
   if (!missing.length) return;
 
   console.error("Not set up to benchmark:");
@@ -641,6 +687,16 @@ export function createFormatters(projectRoot, configDir) {
   // call (pnpm: the package name that sorts higher, so this one today), and this
   // row has to be the WASM one every time.
   const tsvWasmCli = resolveTsvNodeBin(projectRoot, "tsv-wasm").command;
+  // The same two JS entry points on Bun's runtime instead of Node's — what
+  // `bunx --bun tsv` runs. (Plain `bunx tsv` honours the scripts'
+  // `#!/usr/bin/env node` shebang and is the Node rows again.) Addressed by path
+  // with no shim: a Bun install links bins as bare symlinks, so there is no
+  // wrapper script for these rows to pay.
+  const bunBin = resolveBun(projectRoot);
+  const onBun = (row) =>
+    `${bunBin} ${projectRoot}/node_modules/${TSV_NODE_BINS[row].pkg}/${TSV_NODE_BINS[row].script}`;
+  const tsvNpmBun = onBun("tsv-npm");
+  const tsvWasmBun = onBun("tsv-wasm");
 
   // NOTE: Do not use `--experimental-cli`, as it seems to behave differently than the stable CLI...
   return {
@@ -670,6 +726,11 @@ export function createFormatters(projectRoot, configDir) {
     // cold start and a spawn — the delivery cost this row exists to measure.
     "tsv-npm": (files) => `${tsvNpmBin} format ${files}`,
 
+    // The two rows above on Bun's runtime: same scripts, same native binary or
+    // WASM engine under them, JavaScriptCore in place of V8.
+    "tsv-npm-bun": (files) => `${tsvNpmBun} format ${files}`,
+    "tsv-wasm-bun": (files) => `${tsvWasmBun} format ${files}`,
+
     // Unlike tsv, rsvelte-fmt is configurable; the scenario's oxfmtrc.json pins
     // it to tsv's fixed style (printWidth 100, tabs, single quotes, no trailing
     // commas) so break decisions and output volume are comparable.
@@ -691,6 +752,10 @@ export function createFormatters(projectRoot, configDir) {
       "tsv-wasm": (files) => `${tsvWasmCli} format --check ${files}`,
 
       "tsv-npm": (files) => `${tsvNpmBin} format --check ${files}`,
+
+      "tsv-npm-bun": (files) => `${tsvNpmBun} format --check ${files}`,
+
+      "tsv-wasm-bun": (files) => `${tsvWasmBun} format --check ${files}`,
 
       rsvelte: (files) =>
         `${rsvelteEnv} ${rsvelteBin} --check --config ${configDir}/oxfmtrc.json ${files}`,
@@ -875,6 +940,8 @@ const PREFLIGHT_MATCHERS = {
   "tsv-wasm": TSV_DIAGNOSTIC,
   // The dispatcher forwards the native binary's stdio verbatim.
   "tsv-npm": TSV_DIAGNOSTIC,
+  "tsv-npm-bun": TSV_DIAGNOSTIC,
+  "tsv-wasm-bun": TSV_DIAGNOSTIC,
   // Anchored on the .svelte extension so summary lines ("rsvelte-fmt: would
   // reformat N files") can never read as a rejected path. Note this covers only
   // rsvelte-fmt's own Svelte leg; diagnostics from the oxfmt it delegates other
@@ -928,6 +995,8 @@ const PREFLIGHT_SCOPE_COUNTS = {
   tsv: TSV_SCOPE_COUNTS,
   "tsv-wasm": TSV_SCOPE_COUNTS,
   "tsv-npm": TSV_SCOPE_COUNTS,
+  "tsv-npm-bun": TSV_SCOPE_COUNTS,
+  "tsv-wasm-bun": TSV_SCOPE_COUNTS,
   "rsvelte-fmt": {
     considered: /would reformat \d+ \/ (\d+) files/m,
     changed: /would reformat (\d+) \/ \d+ files/m,
@@ -978,6 +1047,11 @@ const PREFLIGHT_ERROR_SIGNALS = {
   // binary, which would time the wrong distribution under this row's name.
   "tsv-npm":
     /^error: |^Error: Cannot find module |^warning: @fuzdev\/tsv could not run its native CLI/m,
+  // Bun's own failures print under the same `error: ` prefix (`error: Module not
+  // found` for a missing script), and a binary that isn't there exits 127,
+  // which preflight already treats as a launch failure.
+  "tsv-npm-bun": /^error: |^warning: @fuzdev\/tsv could not run its native CLI/m,
+  "tsv-wasm-bun": /^error: /m,
 };
 
 /**

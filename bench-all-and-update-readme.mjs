@@ -12,6 +12,7 @@ import {
   assertBenchReady,
   preflightOnly,
   RESULTS_DIR,
+  resolveBun,
   resolveTsv,
   round,
 } from "./shared/utils.mjs";
@@ -262,6 +263,16 @@ async function getVersions() {
       // not installed — the prettier+oxc-parser row is missing from the results anyway
     }
 
+    // Asked of the binary the `-bun` rows run, not of any `bun` on PATH: the
+    // pinned one is what was measured.
+    let bun = "unknown";
+    try {
+      const { stdout } = await execFileAsync(resolveBun("."), ["--version"]);
+      bun = stdout.trim();
+    } catch {
+      // not installed — the Bun rows abort at preflight, so there is nothing to name
+    }
+
     // Asked of the `node` on the scenarios' PATH, not `process.version`: that is
     // the one every npm-bin row starts and the one `measureNodeStartup` times,
     // and a report that publishes the launch floor has to name what produced it.
@@ -285,6 +296,7 @@ async function getVersions() {
       tsvBinary,
       tsvWasm,
       node,
+      bun,
     };
   } catch (error) {
     console.error("Error fetching versions:", error);
@@ -332,14 +344,14 @@ ${benchmarkResults}
   readmeContent = beforeMarker + "\n\n" + newBenchmarkContent + "\n\n" + afterMarker;
 
   // Update versions section. The lines a README may predate — the Prettier
-  // plugin, tsv-wasm, Node, the machine — are optional in the match, so this still works against
-  // one written before each existed.
+  // plugin, tsv-wasm, Node, Bun, the machine — are optional in the match, so this still works
+  // against one written before each existed.
   const versionsRegex =
-    /## Versions\n\n- \*\*Prettier\*\*: .*(\n- \*\*@prettier\/plugin-oxc\*\*: .*)?\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*rsvelte-fmt\*\*: .*\n- \*\*tsv\*\*: .*(\n- \*\*tsv-wasm\*\*: .*)?(\n- \*\*Node\*\*: .*)?(\n\n_Measured on: .*_)?/;
+    /## Versions\n\n- \*\*Prettier\*\*: .*(\n- \*\*@prettier\/plugin-oxc\*\*: .*)?\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*rsvelte-fmt\*\*: .*\n- \*\*tsv\*\*: .*(\n- \*\*tsv-wasm\*\*: .*)?(\n- \*\*Node\*\*: .*)?(\n- \*\*Bun\*\*: .*)?(\n\n_Measured on: .*_)?/;
   // Node is listed with the formatters because five of the rows are a Node
   // process: both prettiers, tsv-npm, tsv-wasm, and the launchers biome and
-  // rsvelte-fmt start with.
-  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **@prettier/plugin-oxc**: ${versions.prettierPluginOxc}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **rsvelte-fmt**: ${versions.rsvelte}\n- **tsv**: ${formatTsvVersion(versions)}\n- **tsv-wasm**: ${versions.tsvWasm}\n- **Node**: ${versions.node}\n\n_Measured on: ${formatMachine(describeMachine())} — the ratios below depend on the core count._`;
+  // rsvelte-fmt start with. Bun is listed for the two rows that run on it.
+  const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **@prettier/plugin-oxc**: ${versions.prettierPluginOxc}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **rsvelte-fmt**: ${versions.rsvelte}\n- **tsv**: ${formatTsvVersion(versions)}\n- **tsv-wasm**: ${versions.tsvWasm}\n- **Node**: ${versions.node}\n- **Bun**: ${versions.bun}\n\n_Measured on: ${formatMachine(describeMachine())} — the ratios below depend on the core count._`;
 
   if (!versionsRegex.test(readmeContent)) {
     // Fail rather than warn: writing fresh numbers under a stale version list is
@@ -365,8 +377,8 @@ ${benchmarkResults}
  * this file, so its keys are a consumed interface: `timestamp` (when the run
  * started), `git_commit` / `git_dirty` (see `describeHarness`), `machine` (see
  * `describeMachine`), `node_startup` (see `measureNodeStartup`), `versions`
- * keyed by formatter name plus `@prettier/plugin-oxc` and the `node` the
- * Node-launched rows ran on,
+ * keyed by formatter name plus `@prettier/plugin-oxc`, the `node` the
+ * Node-launched rows ran on and the `bun` the Bun rows ran on,
  * `tsv_binary` (where the native tsv rows' binary came from), and `scenarios` of
  * records.
  */
@@ -406,6 +418,7 @@ async function composeResults(versions, harness, runStartedAt) {
       tsv: versions.tsv,
       "tsv-wasm": versions.tsvWasm,
       node: versions.node,
+      bun: versions.bun,
     },
     tsv_binary: versions.tsvBinary,
     scenarios,

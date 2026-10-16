@@ -1,3 +1,7 @@
+allowBuilds:
+  # Its postinstall only copies the platform binary into place; the harness
+  # resolves `@oven/bun-<triple>` directly (`resolveBun`), so it needn't run.
+  bun: false
 catalog:
   vite: npm:@voidzero-dev/vite-plus-core@0.3.1
   vite-plus: 0.3.1
