@@ -13,8 +13,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
-    "@fuzdev/tsv": "^0.6.0",
-    "@fuzdev/tsv-wasm": "^0.6.0",
+    "@fuzdev/tsv": "^0.7.0",
+    "@fuzdev/tsv-wasm": "^0.7.0",
     "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
     "@prettier/plugin-oxc": "^0.2.3",
     "@rsvelte/fmt": "^0.7.25",
