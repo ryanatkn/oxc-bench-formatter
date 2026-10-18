@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-10-07T12:50:51.727Z",
-  "git_commit": "453198a",
+  "timestamp": "2026-10-18T09:59:00.915Z",
+  "git_commit": "52a8def",
   "git_dirty": false,
   "machine": {
     "cpu_model": "AMD Ryzen 5 PRO 7530U with Radeon Graphics",
@@ -9,8 +9,8 @@
     "arch": "x86_64"
   },
   "node_startup": {
-    "mean_ms": 19.115,
-    "stddev_ms": 0.899,
+    "mean_ms": 18.819,
+    "stddev_ms": 0.926,
     "runs": 20
   },
   "versions": {
@@ -19,9 +19,10 @@
     "biome": "2.5.15",
     "oxfmt": "0.72.0",
     "rsvelte-fmt": "0.7.25",
-    "tsv": "0.6.0",
-    "tsv-wasm": "0.6.0",
-    "node": "24.14.1"
+    "tsv": "0.7.0",
+    "tsv-wasm": "0.7.0",
+    "node": "24.14.1",
+    "bun": "1.4.3"
   },
   "tsv_binary": {
     "source": "package",
@@ -77,133 +78,133 @@
       "timings": [
         {
           "name": "prettier",
-          "mean_ms": 1607.88,
-          "stddev_ms": 25.256,
-          "min_ms": 1549.59,
-          "max_ms": 1647.255,
-          "user_ms": 1534.58,
-          "system_ms": 878.86
+          "mean_ms": 1607.195,
+          "stddev_ms": 16.635,
+          "min_ms": 1576.837,
+          "max_ms": 1646.018,
+          "user_ms": 1526.859,
+          "system_ms": 881.873
         },
         {
           "name": "prettier+oxc-parser",
-          "mean_ms": 975.877,
-          "stddev_ms": 8.763,
-          "min_ms": 955.216,
-          "max_ms": 988.928,
-          "user_ms": 887.704,
-          "system_ms": 445.56
+          "mean_ms": 975.252,
+          "stddev_ms": 10.728,
+          "min_ms": 954.506,
+          "max_ms": 994.801,
+          "user_ms": 888.287,
+          "system_ms": 443.086
         },
         {
           "name": "biome",
-          "mean_ms": 107.43,
-          "stddev_ms": 1.035,
-          "min_ms": 105.742,
-          "max_ms": 109.166,
-          "user_ms": 80.113,
-          "system_ms": 34.213
+          "mean_ms": 106.88,
+          "stddev_ms": 0.814,
+          "min_ms": 105.266,
+          "max_ms": 108.661,
+          "user_ms": 79.149,
+          "system_ms": 35.028
         },
         {
           "name": "oxfmt",
-          "mean_ms": 60.817,
-          "stddev_ms": 1.286,
-          "min_ms": 58.821,
-          "max_ms": 64.145,
-          "user_ms": 46.039,
-          "system_ms": 47.155
+          "mean_ms": 60.977,
+          "stddev_ms": 1.396,
+          "min_ms": 59.217,
+          "max_ms": 64.537,
+          "user_ms": 44.902,
+          "system_ms": 48.452
         },
         {
           "name": "tsv-npm",
-          "mean_ms": 46.153,
-          "stddev_ms": 0.803,
-          "min_ms": 45.137,
-          "max_ms": 48.345,
-          "user_ms": 29.709,
-          "system_ms": 18.823
+          "mean_ms": 46.494,
+          "stddev_ms": 0.922,
+          "min_ms": 45.024,
+          "max_ms": 48.33,
+          "user_ms": 32.264,
+          "system_ms": 16.559
         },
         {
           "name": "tsv",
-          "mean_ms": 16.375,
-          "stddev_ms": 0.609,
-          "min_ms": 14.725,
-          "max_ms": 17.409,
-          "user_ms": 9.207,
-          "system_ms": 7.151
+          "mean_ms": 16.286,
+          "stddev_ms": 0.376,
+          "min_ms": 15.436,
+          "max_ms": 16.891,
+          "user_ms": 8.343,
+          "system_ms": 7.928
         }
       ],
       "fastest": "tsv",
       "speedups": [
         {
           "name": "tsv-npm",
-          "ratio": 2.8185,
-          "ratio_stddev": 0.1157
+          "ratio": 2.8549,
+          "ratio_stddev": 0.0869
         },
         {
           "name": "oxfmt",
-          "ratio": 3.714,
-          "ratio_stddev": 0.1588
+          "ratio": 3.7442,
+          "ratio_stddev": 0.1217
         },
         {
           "name": "biome",
-          "ratio": 6.5605,
-          "ratio_stddev": 0.2519
+          "ratio": 6.5628,
+          "ratio_stddev": 0.1596
         },
         {
           "name": "prettier+oxc-parser",
-          "ratio": 59.5948,
-          "ratio_stddev": 2.2786
+          "ratio": 59.8841,
+          "ratio_stddev": 1.532
         },
         {
           "name": "prettier",
-          "ratio": 98.19,
-          "ratio_stddev": 3.9618
+          "ratio": 98.6877,
+          "ratio_stddev": 2.4978
         }
       ],
       "memory": [
         {
           "name": "prettier",
-          "mean_mb": 306,
-          "min_mb": 293.453,
-          "max_mb": 320.227,
-          "ratio": 22.8929,
-          "ratio_stddev": 0.6467
+          "mean_mb": 305.89,
+          "min_mb": 293.789,
+          "max_mb": 318.855,
+          "ratio": 22.5863,
+          "ratio_stddev": 0.5451
         },
         {
           "name": "prettier+oxc-parser",
-          "mean_mb": 196.355,
-          "min_mb": 194.379,
-          "max_mb": 198.574,
-          "ratio": 14.6899,
-          "ratio_stddev": 0.144
+          "mean_mb": 196.73,
+          "min_mb": 194.457,
+          "max_mb": 198.289,
+          "ratio": 14.5262,
+          "ratio_stddev": 0.1643
         },
         {
           "name": "biome",
-          "mean_mb": 96.233,
-          "min_mb": 94.535,
-          "max_mb": 98.445,
-          "ratio": 7.1995,
-          "ratio_stddev": 0.122
+          "mean_mb": 96.194,
+          "min_mb": 94.066,
+          "max_mb": 98.582,
+          "ratio": 7.1028,
+          "ratio_stddev": 0.1254
         },
         {
           "name": "oxfmt",
-          "mean_mb": 111.768,
-          "min_mb": 110.184,
-          "max_mb": 112.203,
-          "ratio": 8.3617,
-          "ratio_stddev": 0.0697
+          "mean_mb": 111.999,
+          "min_mb": 111.754,
+          "max_mb": 112.156,
+          "ratio": 8.2698,
+          "ratio_stddev": 0.0869
         },
         {
           "name": "tsv-npm",
-          "mean_mb": 49.512,
-          "min_mb": 49.313,
-          "max_mb": 49.715,
-          "ratio": 3.7041,
-          "ratio_stddev": 0.0262
+          "mean_mb": 49.461,
+          "min_mb": 49.207,
+          "max_mb": 49.75,
+          "ratio": 3.6521,
+          "ratio_stddev": 0.0394
         },
         {
           "name": "tsv",
-          "mean_mb": 13.367,
-          "min_mb": 13.191,
-          "max_mb": 13.535
+          "mean_mb": 13.543,
+          "min_mb": 13.262,
+          "max_mb": 13.824
         }
       ],
       "files": 1
@@ -244,89 +245,89 @@
       "timings": [
         {
           "name": "prettier",
-          "mean_ms": 11952.766,
-          "stddev_ms": 134.07,
-          "min_ms": 11792.872,
-          "max_ms": 12172.838,
-          "user_ms": 20146.515,
-          "system_ms": 1357.768
+          "mean_ms": 11630.611,
+          "stddev_ms": 67.665,
+          "min_ms": 11521.652,
+          "max_ms": 11726.381,
+          "user_ms": 19763.49,
+          "system_ms": 1368.795
         },
         {
           "name": "prettier+oxc-parser",
-          "mean_ms": 9558.937,
-          "stddev_ms": 141.511,
-          "min_ms": 9385.633,
-          "max_ms": 9782.875,
-          "user_ms": 12442.803,
-          "system_ms": 722.154
+          "mean_ms": 9408.674,
+          "stddev_ms": 140.341,
+          "min_ms": 9248.019,
+          "max_ms": 9627.162,
+          "user_ms": 12254.78,
+          "system_ms": 720.729
         },
         {
           "name": "biome",
-          "mean_ms": 409.576,
-          "stddev_ms": 2.358,
-          "min_ms": 406.462,
-          "max_ms": 412.748,
-          "user_ms": 3119.938,
-          "system_ms": 281.087
+          "mean_ms": 405.464,
+          "stddev_ms": 1.971,
+          "min_ms": 402.424,
+          "max_ms": 408.825,
+          "user_ms": 3070.817,
+          "system_ms": 298.825
         },
         {
           "name": "oxfmt",
-          "mean_ms": 140.435,
-          "stddev_ms": 1.855,
-          "min_ms": 138.066,
-          "max_ms": 144.484,
-          "user_ms": 755.299,
-          "system_ms": 296.921
+          "mean_ms": 139.79,
+          "stddev_ms": 2.891,
+          "min_ms": 136.159,
+          "max_ms": 146.128,
+          "user_ms": 738.205,
+          "system_ms": 313.129
         }
       ],
       "fastest": "oxfmt",
       "speedups": [
         {
           "name": "biome",
-          "ratio": 2.9165,
-          "ratio_stddev": 0.042
+          "ratio": 2.9005,
+          "ratio_stddev": 0.0616
         },
         {
           "name": "prettier+oxc-parser",
-          "ratio": 68.0667,
-          "ratio_stddev": 1.3503
+          "ratio": 67.3057,
+          "ratio_stddev": 1.7161
         },
         {
           "name": "prettier",
-          "ratio": 85.1125,
-          "ratio_stddev": 1.4747
+          "ratio": 83.2005,
+          "ratio_stddev": 1.7873
         }
       ],
       "memory": [
         {
           "name": "prettier",
-          "mean_mb": 419.237,
-          "min_mb": 382.723,
-          "max_mb": 470.773,
-          "ratio": 1.833,
-          "ratio_stddev": 0.1435
+          "mean_mb": 461.559,
+          "min_mb": 408.93,
+          "max_mb": 506.754,
+          "ratio": 1.9762,
+          "ratio_stddev": 0.1399
         },
         {
           "name": "prettier+oxc-parser",
-          "mean_mb": 326.339,
-          "min_mb": 311.637,
-          "max_mb": 345.461,
-          "ratio": 1.4268,
-          "ratio_stddev": 0.0647
+          "mean_mb": 326.045,
+          "min_mb": 308.242,
+          "max_mb": 348.801,
+          "ratio": 1.396,
+          "ratio_stddev": 0.0685
         },
         {
           "name": "biome",
-          "mean_mb": 184.616,
-          "min_mb": 181.965,
-          "max_mb": 186.926,
-          "ratio": 0.8072,
-          "ratio_stddev": 0.0141
+          "mean_mb": 184.356,
+          "min_mb": 180.902,
+          "max_mb": 189.703,
+          "ratio": 0.7893,
+          "ratio_stddev": 0.0212
         },
         {
           "name": "oxfmt",
-          "mean_mb": 228.722,
-          "min_mb": 224.094,
-          "max_mb": 236.984
+          "mean_mb": 233.559,
+          "min_mb": 224.039,
+          "max_mb": 241.41
         }
       ],
       "files": 2329
@@ -355,45 +356,45 @@
       "timings": [
         {
           "name": "prettier+oxc-parser",
-          "mean_ms": 51743.333,
-          "stddev_ms": 335.661,
-          "min_ms": 51427.332,
-          "max_ms": 52095.694,
-          "user_ms": 57528.843,
-          "system_ms": 6901.424
+          "mean_ms": 51441.537,
+          "stddev_ms": 304.898,
+          "min_ms": 51091.727,
+          "max_ms": 51650.894,
+          "user_ms": 57374.107,
+          "system_ms": 6797.306
         },
         {
           "name": "oxfmt",
-          "mean_ms": 2818.933,
-          "stddev_ms": 8.729,
-          "min_ms": 2809.038,
-          "max_ms": 2825.543,
-          "user_ms": 28029.903,
-          "system_ms": 2856.8
+          "mean_ms": 2778.426,
+          "stddev_ms": 19.473,
+          "min_ms": 2756.829,
+          "max_ms": 2794.644,
+          "user_ms": 27720.959,
+          "system_ms": 2811.058
         }
       ],
       "fastest": "oxfmt",
       "speedups": [
         {
           "name": "prettier+oxc-parser",
-          "ratio": 18.3556,
-          "ratio_stddev": 0.1319
+          "ratio": 18.5146,
+          "ratio_stddev": 0.1699
         }
       ],
       "memory": [
         {
           "name": "prettier+oxc-parser",
-          "mean_mb": 1805.316,
-          "min_mb": 1787.305,
-          "max_mb": 1838.605,
-          "ratio": 6.3656,
-          "ratio_stddev": 0.2685
+          "mean_mb": 1667.685,
+          "min_mb": 1615.867,
+          "max_mb": 1748.637,
+          "ratio": 6.1284,
+          "ratio_stddev": 0.3205
         },
         {
           "name": "oxfmt",
-          "mean_mb": 283.605,
-          "min_mb": 272.359,
-          "max_mb": 294.488
+          "mean_mb": 272.125,
+          "min_mb": 262.602,
+          "max_mb": 277.414
         }
       ],
       "files": 5615
@@ -422,45 +423,45 @@
       "timings": [
         {
           "name": "prettier+oxc-parser",
-          "mean_ms": 25761.054,
-          "stddev_ms": 167.843,
-          "min_ms": 25616.747,
-          "max_ms": 25945.247,
-          "user_ms": 34169.447,
-          "system_ms": 2180.741
+          "mean_ms": 25258.269,
+          "stddev_ms": 17.344,
+          "min_ms": 25239.416,
+          "max_ms": 25273.548,
+          "user_ms": 33452.44,
+          "system_ms": 2229.593
         },
         {
           "name": "oxfmt",
-          "mean_ms": 2256.646,
-          "stddev_ms": 20.318,
-          "min_ms": 2242.402,
-          "max_ms": 2279.913,
-          "user_ms": 21799.671,
-          "system_ms": 2695.591
+          "mean_ms": 2215.917,
+          "stddev_ms": 89.394,
+          "min_ms": 2155.216,
+          "max_ms": 2318.572,
+          "user_ms": 21492.819,
+          "system_ms": 2687.368
         }
       ],
       "fastest": "oxfmt",
       "speedups": [
         {
           "name": "prettier+oxc-parser",
-          "ratio": 11.4156,
-          "ratio_stddev": 0.1269
+          "ratio": 11.3986,
+          "ratio_stddev": 0.4599
         }
       ],
       "memory": [
         {
           "name": "prettier+oxc-parser",
-          "mean_mb": 682.44,
-          "min_mb": 639.285,
-          "max_mb": 749.164,
-          "ratio": 2.9972,
-          "ratio_stddev": 0.2749
+          "mean_mb": 668.26,
+          "min_mb": 654.211,
+          "max_mb": 686.738,
+          "ratio": 2.9337,
+          "ratio_stddev": 0.2178
         },
         {
           "name": "oxfmt",
-          "mean_mb": 227.689,
-          "min_mb": 219.504,
-          "max_mb": 233.645
+          "mean_mb": 227.789,
+          "min_mb": 211.684,
+          "max_mb": 243.531
         }
       ],
       "files": 2312
@@ -514,133 +515,133 @@
       "timings": [
         {
           "name": "prettier",
-          "mean_ms": 8389.01,
-          "stddev_ms": 116.758,
-          "min_ms": 8236.241,
-          "max_ms": 8574.15,
-          "user_ms": 13968.569,
-          "system_ms": 931.146
+          "mean_ms": 8152.53,
+          "stddev_ms": 65.011,
+          "min_ms": 8059.969,
+          "max_ms": 8259.921,
+          "user_ms": 13650.705,
+          "system_ms": 902.686
         },
         {
           "name": "prettier+oxc-parser",
-          "mean_ms": 6889.291,
-          "stddev_ms": 81.509,
-          "min_ms": 6746.539,
-          "max_ms": 7046.292,
-          "user_ms": 8834.464,
-          "system_ms": 543.955
+          "mean_ms": 6762.951,
+          "stddev_ms": 45.126,
+          "min_ms": 6710.451,
+          "max_ms": 6844.069,
+          "user_ms": 8657.391,
+          "system_ms": 571.107
         },
         {
           "name": "biome",
-          "mean_ms": 297.575,
-          "stddev_ms": 0.971,
-          "min_ms": 296.302,
-          "max_ms": 298.894,
-          "user_ms": 2142.525,
-          "system_ms": 218.843
+          "mean_ms": 295.8,
+          "stddev_ms": 2.308,
+          "min_ms": 293.214,
+          "max_ms": 300.577,
+          "user_ms": 2125.078,
+          "system_ms": 212.553
         },
         {
           "name": "oxfmt",
-          "mean_ms": 117.21,
-          "stddev_ms": 3.076,
-          "min_ms": 113.612,
-          "max_ms": 122.019,
-          "user_ms": 549.092,
-          "system_ms": 248.227
+          "mean_ms": 116.364,
+          "stddev_ms": 2.255,
+          "min_ms": 112.855,
+          "max_ms": 120.159,
+          "user_ms": 522.527,
+          "system_ms": 284.132
         },
         {
           "name": "tsv-npm",
-          "mean_ms": 74.483,
-          "stddev_ms": 1.376,
-          "min_ms": 73.016,
-          "max_ms": 77.309,
-          "user_ms": 268.595,
-          "system_ms": 136.653
+          "mean_ms": 75.427,
+          "stddev_ms": 0.782,
+          "min_ms": 74.31,
+          "max_ms": 76.578,
+          "user_ms": 265.717,
+          "system_ms": 146.717
         },
         {
           "name": "tsv",
-          "mean_ms": 43.785,
-          "stddev_ms": 0.36,
-          "min_ms": 43.107,
-          "max_ms": 44.505,
-          "user_ms": 257.042,
-          "system_ms": 115.486
+          "mean_ms": 44.682,
+          "stddev_ms": 0.491,
+          "min_ms": 43.837,
+          "max_ms": 45.307,
+          "user_ms": 250.814,
+          "system_ms": 128.233
         }
       ],
       "fastest": "tsv",
       "speedups": [
         {
           "name": "tsv-npm",
-          "ratio": 1.7011,
-          "ratio_stddev": 0.0344
+          "ratio": 1.6881,
+          "ratio_stddev": 0.0255
         },
         {
           "name": "oxfmt",
-          "ratio": 2.6769,
-          "ratio_stddev": 0.0736
+          "ratio": 2.6043,
+          "ratio_stddev": 0.058
         },
         {
           "name": "biome",
-          "ratio": 6.7963,
-          "ratio_stddev": 0.0601
+          "ratio": 6.6201,
+          "ratio_stddev": 0.0892
         },
         {
           "name": "prettier+oxc-parser",
-          "ratio": 157.3436,
-          "ratio_stddev": 2.2666
+          "ratio": 151.3579,
+          "ratio_stddev": 1.9447
         },
         {
           "name": "prettier",
-          "ratio": 191.5954,
-          "ratio_stddev": 3.0968
+          "ratio": 182.4573,
+          "ratio_stddev": 2.476
         }
       ],
       "memory": [
         {
           "name": "prettier",
-          "mean_mb": 453.161,
-          "min_mb": 386.371,
-          "max_mb": 475.125,
-          "ratio": 22.1603,
-          "ratio_stddev": 1.48
+          "mean_mb": 453.978,
+          "min_mb": 396.18,
+          "max_mb": 514.418,
+          "ratio": 22.1748,
+          "ratio_stddev": 1.9999
         },
         {
           "name": "prettier+oxc-parser",
-          "mean_mb": 304.369,
-          "min_mb": 301.301,
-          "max_mb": 308.441,
-          "ratio": 14.8841,
-          "ratio_stddev": 0.4484
+          "mean_mb": 303.035,
+          "min_mb": 300.434,
+          "max_mb": 306.387,
+          "ratio": 14.8019,
+          "ratio_stddev": 0.463
         },
         {
           "name": "biome",
-          "mean_mb": 145.243,
-          "min_mb": 141.09,
-          "max_mb": 148.688,
-          "ratio": 7.1026,
-          "ratio_stddev": 0.2486
+          "mean_mb": 147.763,
+          "min_mb": 145.258,
+          "max_mb": 150.473,
+          "ratio": 7.2176,
+          "ratio_stddev": 0.2335
         },
         {
           "name": "oxfmt",
-          "mean_mb": 227.3,
-          "min_mb": 221.41,
-          "max_mb": 234.262,
-          "ratio": 11.1153,
-          "ratio_stddev": 0.3836
+          "mean_mb": 226.389,
+          "min_mb": 220.926,
+          "max_mb": 234.148,
+          "ratio": 11.0581,
+          "ratio_stddev": 0.3855
         },
         {
           "name": "tsv-npm",
-          "mean_mb": 49.432,
-          "min_mb": 49.027,
-          "max_mb": 49.758,
-          "ratio": 2.4173,
-          "ratio_stddev": 0.0712
+          "mean_mb": 49.594,
+          "min_mb": 49.246,
+          "max_mb": 49.934,
+          "ratio": 2.4225,
+          "ratio_stddev": 0.0749
         },
         {
           "name": "tsv",
-          "mean_mb": 20.449,
-          "min_mb": 19.477,
-          "max_mb": 21.262
+          "mean_mb": 20.473,
+          "min_mb": 19.531,
+          "max_mb": 21.434
         }
       ],
       "files": 1648
@@ -676,67 +677,67 @@
       "timings": [
         {
           "name": "rsvelte-fmt",
-          "mean_ms": 164.641,
-          "stddev_ms": 5.206,
-          "min_ms": 158.187,
-          "max_ms": 176.842,
-          "user_ms": 632.721,
-          "system_ms": 647.284
+          "mean_ms": 163.296,
+          "stddev_ms": 3.528,
+          "min_ms": 157.502,
+          "max_ms": 167.559,
+          "user_ms": 627.155,
+          "system_ms": 641.625
         },
         {
           "name": "tsv-npm",
-          "mean_ms": 55.591,
-          "stddev_ms": 0.823,
-          "min_ms": 54.153,
-          "max_ms": 56.824,
-          "user_ms": 165.049,
-          "system_ms": 76.014
+          "mean_ms": 56.006,
+          "stddev_ms": 1.088,
+          "min_ms": 54.709,
+          "max_ms": 58.577,
+          "user_ms": 163.168,
+          "system_ms": 83.049
         },
         {
           "name": "tsv",
-          "mean_ms": 24.932,
-          "stddev_ms": 0.27,
-          "min_ms": 24.524,
-          "max_ms": 25.349,
-          "user_ms": 139.841,
-          "system_ms": 69.385
+          "mean_ms": 25.415,
+          "stddev_ms": 0.259,
+          "min_ms": 24.928,
+          "max_ms": 25.77,
+          "user_ms": 140.778,
+          "system_ms": 72.756
         }
       ],
       "fastest": "tsv",
       "speedups": [
         {
           "name": "tsv-npm",
-          "ratio": 2.2297,
-          "ratio_stddev": 0.0409
+          "ratio": 2.2036,
+          "ratio_stddev": 0.0484
         },
         {
           "name": "rsvelte-fmt",
-          "ratio": 6.6035,
-          "ratio_stddev": 0.2208
+          "ratio": 6.4251,
+          "ratio_stddev": 0.1535
         }
       ],
       "memory": [
         {
           "name": "rsvelte-fmt",
-          "mean_mb": 155.203,
-          "min_mb": 145.801,
-          "max_mb": 161.785,
-          "ratio": 12.8737,
-          "ratio_stddev": 0.5792
+          "mean_mb": 152.986,
+          "min_mb": 141.516,
+          "max_mb": 161.426,
+          "ratio": 12.5406,
+          "ratio_stddev": 0.5745
         },
         {
           "name": "tsv-npm",
-          "mean_mb": 49.639,
-          "min_mb": 49.461,
-          "max_mb": 49.785,
-          "ratio": 4.1174,
-          "ratio_stddev": 0.0748
+          "mean_mb": 49.591,
+          "min_mb": 49.449,
+          "max_mb": 49.73,
+          "ratio": 4.0651,
+          "ratio_stddev": 0.1032
         },
         {
           "name": "tsv",
-          "mean_mb": 12.056,
-          "min_mb": 11.848,
-          "max_mb": 12.527
+          "mean_mb": 12.199,
+          "min_mb": 11.875,
+          "max_mb": 12.773
         }
       ],
       "files": 1091
@@ -751,6 +752,12 @@
       "settle_seconds": 10,
       "preflight": [
         {
+          "name": "tsv-wasm-bun",
+          "rejected": 0,
+          "unavailable": false,
+          "crashed": false
+        },
+        {
           "name": "tsv-wasm",
           "rejected": 0,
           "unavailable": false,
@@ -758,6 +765,12 @@
         },
         {
           "name": "tsv-npm",
+          "rejected": 0,
+          "unavailable": false,
+          "crashed": false
+        },
+        {
+          "name": "tsv-npm-bun",
           "rejected": 0,
           "unavailable": false,
           "crashed": false
@@ -771,68 +784,112 @@
       ],
       "timings": [
         {
+          "name": "tsv-wasm-bun",
+          "mean_ms": 95.919,
+          "stddev_ms": 2.014,
+          "min_ms": 92.077,
+          "max_ms": 99.752,
+          "user_ms": 472.848,
+          "system_ms": 74.498
+        },
+        {
           "name": "tsv-wasm",
-          "mean_ms": 157.84,
-          "stddev_ms": 4.329,
-          "min_ms": 152.413,
-          "max_ms": 171.153,
-          "user_ms": 394.881,
-          "system_ms": 55.219
+          "mean_ms": 157.549,
+          "stddev_ms": 3.564,
+          "min_ms": 150.944,
+          "max_ms": 164.115,
+          "user_ms": 389.63,
+          "system_ms": 51.35
         },
         {
           "name": "tsv-npm",
-          "mean_ms": 47.264,
-          "stddev_ms": 0.707,
-          "min_ms": 46.013,
-          "max_ms": 49.129,
-          "user_ms": 33.556,
-          "system_ms": 16.085
+          "mean_ms": 46.797,
+          "stddev_ms": 1.32,
+          "min_ms": 45.127,
+          "max_ms": 51.151,
+          "user_ms": 32.207,
+          "system_ms": 16.777
+        },
+        {
+          "name": "tsv-npm-bun",
+          "mean_ms": 26.037,
+          "stddev_ms": 0.292,
+          "min_ms": 25.611,
+          "max_ms": 26.642,
+          "user_ms": 16.36,
+          "system_ms": 11.053
         },
         {
           "name": "tsv",
-          "mean_ms": 16.536,
-          "stddev_ms": 0.436,
-          "min_ms": 15.803,
-          "max_ms": 17.288,
-          "user_ms": 9.646,
-          "system_ms": 6.847
+          "mean_ms": 16.431,
+          "stddev_ms": 0.326,
+          "min_ms": 15.788,
+          "max_ms": 17.01,
+          "user_ms": 9.069,
+          "system_ms": 7.288
         }
       ],
       "fastest": "tsv",
       "speedups": [
         {
+          "name": "tsv-npm-bun",
+          "ratio": 1.5846,
+          "ratio_stddev": 0.0361
+        },
+        {
           "name": "tsv-npm",
-          "ratio": 2.8582,
-          "ratio_stddev": 0.0867
+          "ratio": 2.8481,
+          "ratio_stddev": 0.0982
+        },
+        {
+          "name": "tsv-wasm-bun",
+          "ratio": 5.8377,
+          "ratio_stddev": 0.1686
         },
         {
           "name": "tsv-wasm",
-          "ratio": 9.545,
-          "ratio_stddev": 0.3633
+          "ratio": 9.5886,
+          "ratio_stddev": 0.2884
         }
       ],
       "memory": [
         {
+          "name": "tsv-wasm-bun",
+          "mean_mb": 127.131,
+          "min_mb": 122.316,
+          "max_mb": 132.113,
+          "ratio": 9.36,
+          "ratio_stddev": 0.2069
+        },
+        {
           "name": "tsv-wasm",
-          "mean_mb": 121.722,
-          "min_mb": 114.547,
-          "max_mb": 124.441,
-          "ratio": 9.0896,
-          "ratio_stddev": 0.2247
+          "mean_mb": 122.084,
+          "min_mb": 117.918,
+          "max_mb": 125.645,
+          "ratio": 8.9884,
+          "ratio_stddev": 0.1897
         },
         {
           "name": "tsv-npm",
-          "mean_mb": 49.459,
-          "min_mb": 47.516,
-          "max_mb": 49.828,
-          "ratio": 3.6933,
-          "ratio_stddev": 0.0495
+          "mean_mb": 49.618,
+          "min_mb": 49.133,
+          "max_mb": 49.875,
+          "ratio": 3.6531,
+          "ratio_stddev": 0.0364
+        },
+        {
+          "name": "tsv-npm-bun",
+          "mean_mb": 20.359,
+          "min_mb": 20.105,
+          "max_mb": 20.582,
+          "ratio": 1.4989,
+          "ratio_stddev": 0.0164
         },
         {
           "name": "tsv",
-          "mean_mb": 13.391,
-          "min_mb": 13.16,
-          "max_mb": 13.738
+          "mean_mb": 13.582,
+          "min_mb": 13.242,
+          "max_mb": 13.84
         }
       ],
       "files": 1
