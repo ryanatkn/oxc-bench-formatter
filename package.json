@@ -12,16 +12,16 @@
     "setup": "./init.sh"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.15",
-    "@fuzdev/tsv": "^0.7.0",
-    "@fuzdev/tsv-wasm": "^0.7.0",
+    "@biomejs/biome": "^2.6.4",
+    "@fuzdev/tsv": "^0.8.0",
+    "@fuzdev/tsv-wasm": "^0.8.0",
     "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
     "@prettier/plugin-oxc": "^0.2.3",
     "@rsvelte/fmt": "^0.7.25",
-    "bun": "1.4.3",
-    "oxfmt": "^0.72.0",
-    "prettier": "^3.9.9",
-    "prettier-plugin-packagejson": "^3.0.2",
+    "bun": "1.4.4",
+    "oxfmt": "^0.75.0",
+    "prettier": "^3.9.10",
+    "prettier-plugin-packagejson": "^3.1.0",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "vite-plus": "catalog:"
   },

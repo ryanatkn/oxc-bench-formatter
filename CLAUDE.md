@@ -1,8 +1,9 @@
 # CLAUDE.md
 
 Navigation aid for this repo. The upstream agent guidance lives in
-[AGENTS.md](AGENTS.md) (this file used to be a symlink to it); this file is the
-fuller working map, including the tsv integration this fork adds.
+[AGENTS.md](AGENTS.md) (this file used to be a symlink to it, which upstream has
+since deleted); this file is the fuller working map, including the tsv
+integration this fork adds.
 
 ## What this is
 
