@@ -19,8 +19,8 @@
 import { execFileSync } from "child_process";
 
 export const CORPORA_URL = "https://github.com/fuzdev/corpora.git";
-export const CORPORA_COMMIT = "63d1790f2473b8aa2eb27c0147dda8e89ee0a5bd";
-export const CORPORA_TREE = "9b64dd2a4e214ee665ec9bf8c0ae1319c39dc845";
+export const CORPORA_COMMIT = "cc62dca5aea7187fcd252806e486ff25b6896163";
+export const CORPORA_TREE = "44afe2aede8467866dc73cbdbda51f22f17aafc7";
 
 // The seven collections read out of that tree — every third-party Svelte
 // source corpora vendors (kit, svelte.dev, and five component libraries).
@@ -55,7 +55,7 @@ export const SELECTION =
     .join(",") || "all";
 
 // .svelte files across those collections at the pinned tree, after SUBPATHS.
-export const EXPECTED_FILES = 1091;
+export const EXPECTED_FILES = 1150;
 
 // What the snapshot's commit message records, and the line the pin is read back
 // from. Kept as one regex so writer and reader can't drift. The selection is
