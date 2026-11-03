@@ -19,8 +19,8 @@
 import { execFileSync } from "child_process";
 
 export const CORPORA_URL = "https://github.com/fuzdev/corpora.git";
-export const CORPORA_COMMIT = "cc62dca5aea7187fcd252806e486ff25b6896163";
-export const CORPORA_TREE = "44afe2aede8467866dc73cbdbda51f22f17aafc7";
+export const CORPORA_COMMIT = "52bff709bbd31414d15d70d8e51476217d9f0d83";
+export const CORPORA_TREE = "98dc2cc10ac5bc523e3f0bde364bcb7697369792";
 
 // The seven collections read out of that tree — every third-party Svelte
 // source corpora vendors (kit, svelte.dev, and five component libraries).
