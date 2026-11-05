@@ -80,13 +80,14 @@ async function main() {
   printCorpus(`${describePin()}, snapshot ${describeCorpus(dataDir)}`);
   printRunCounts();
   console.log("- Git reset before each run");
-  console.log("- .svelte only: the two Svelte-native formatters head-to-head");
+  console.log("- .svelte only: the Svelte-native formatters head-to-head");
   console.log("");
 
   // tsv runs twice: rsvelte-fmt is timed through its npm bin, a Node launcher
   // that execs its native binary, so tsv-npm — tsv through its own Node
   // dispatcher — is the like-for-like row against it, and bare tsv stays as the
-  // baseline every ratio is taken against. rsvelte-fmt 0.7.x SIGABRTs when its
+  // baseline every ratio is taken against. bun-fmt is the Bun binary run
+  // directly, so bare tsv is its counterpart. rsvelte-fmt 0.7.x SIGABRTs when its
   // stdout and stderr share a pipe (see `runPreflight`); should one fire anyway,
   // benchRows fails the scenario rather than time a crashed partial run as a
   // fast pass.
@@ -96,6 +97,11 @@ async function main() {
         name: "rsvelte-fmt",
         command: formatters.rsvelte(dataDir),
         check: formatters.check.rsvelte(dataDir),
+      },
+      {
+        name: "bun-fmt",
+        command: formatters["bun-fmt"](dataDir),
+        check: formatters.check["bun-fmt"](dataDir),
       },
       {
         name: "tsv-npm",

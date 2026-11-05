@@ -53,11 +53,12 @@ async function main() {
   );
   console.log("");
 
-  // tsv runs twice. The other four are timed the way npm installs them, through
-  // a Node bin (biome's spawns its native binary exactly as tsv's dispatcher
-  // does), so tsv-npm is tsv on that same footing and the row to read against
-  // them; the bare-binary tsv row stays as the engine-side figure and the
-  // baseline every ratio is taken against.
+  // tsv runs twice. The prettier, biome and oxfmt rows are timed the way npm
+  // installs them, through a Node bin (biome's spawns its native binary exactly
+  // as tsv's dispatcher does), so tsv-npm is tsv on that same footing and the
+  // row to read against them; the bare-binary tsv row stays as the engine-side
+  // figure and the baseline every ratio is taken against. bun-fmt is the Bun
+  // binary run directly, as `bun fmt` runs, so bare tsv is its counterpart.
   const oxc = "prettierrc-oxc.json";
   await benchRows(
     [
@@ -80,6 +81,11 @@ async function main() {
         name: "oxfmt",
         command: formatters.oxfmt(dataDir),
         check: formatters.check.oxfmt(dataDir),
+      },
+      {
+        name: "bun-fmt",
+        command: formatters["bun-fmt"](dataDir),
+        check: formatters.check["bun-fmt"](dataDir),
       },
       {
         name: "tsv-npm",

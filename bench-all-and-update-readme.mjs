@@ -263,14 +263,14 @@ async function getVersions() {
       // not installed — the prettier+oxc-parser row is missing from the results anyway
     }
 
-    // Asked of the binary the `-bun` rows run, not of any `bun` on PATH: the
-    // pinned one is what was measured.
+    // Asked of the binary the `-bun` rows and `bun-fmt` run, not of any `bun` on
+    // PATH: the pinned one is what was measured. It is bun-fmt's version too.
     let bun = "unknown";
     try {
       const { stdout } = await execFileAsync(resolveBun("."), ["--version"]);
       bun = stdout.trim();
     } catch {
-      // not installed — the Bun rows abort at preflight, so there is nothing to name
+      // not installed — the Bun rows and bun-fmt abort at preflight, so there is nothing to name
     }
 
     // Asked of the `node` on the scenarios' PATH, not `process.version`: that is
@@ -350,7 +350,8 @@ ${benchmarkResults}
     /## Versions\n\n- \*\*Prettier\*\*: .*(\n- \*\*@prettier\/plugin-oxc\*\*: .*)?\n- \*\*Biome\*\*: .*\n- \*\*Oxfmt\*\*: .*\n- \*\*rsvelte-fmt\*\*: .*\n- \*\*tsv\*\*: .*(\n- \*\*tsv-wasm\*\*: .*)?(\n- \*\*Node\*\*: .*)?(\n- \*\*Bun\*\*: .*)?(\n\n_Measured on: .*_)?/;
   // Node is listed with the formatters because five of the rows are a Node
   // process: both prettiers, tsv-npm, tsv-wasm, and the launchers biome and
-  // rsvelte-fmt start with. Bun is listed for the two rows that run on it.
+  // rsvelte-fmt start with. Bun is listed for the two rows that run on it and
+  // for bun-fmt, its own formatter.
   const newVersionsContent = `## Versions\n\n- **Prettier**: ${versions.prettier}\n- **@prettier/plugin-oxc**: ${versions.prettierPluginOxc}\n- **Biome**: ${versions.biome}\n- **Oxfmt**: ${versions.oxfmt}\n- **rsvelte-fmt**: ${versions.rsvelte}\n- **tsv**: ${formatTsvVersion(versions)}\n- **tsv-wasm**: ${versions.tsvWasm}\n- **Node**: ${versions.node}\n- **Bun**: ${versions.bun}\n\n_Measured on: ${formatMachine(describeMachine())} — the ratios below depend on the core count._`;
 
   if (!versionsRegex.test(readmeContent)) {
@@ -378,7 +379,7 @@ ${benchmarkResults}
  * started), `git_commit` / `git_dirty` (see `describeHarness`), `machine` (see
  * `describeMachine`), `node_startup` (see `measureNodeStartup`), `versions`
  * keyed by formatter name plus `@prettier/plugin-oxc`, the `node` the
- * Node-launched rows ran on and the `bun` the Bun rows ran on,
+ * Node-launched rows ran on and the `bun` the Bun rows and bun-fmt ran on,
  * `tsv_binary` (where the native tsv rows' binary came from), and `scenarios` of
  * records.
  */

@@ -93,6 +93,11 @@ const CLEAN_MD = "*   alpha\n*   beta\n";
 
 const BROKEN_SVELTE = "<script>let a = <div/></script>\n";
 
+// A Svelte file whose <script> doesn't parse. bun fmt reads the shared fixture
+// above, and on this one it only warns, leaves the block as written and exits 0
+// — the silent case its matcher has to catch.
+const BROKEN_SVELTE_SCRIPT = "<script>\n\tlet a = ;\n</script>\n";
+
 const CLEAN_SVELTE = `<script>
      const o = {alpha: 1, beta: 2}
 </script>
@@ -109,6 +114,9 @@ const CONFIGS = {
     embeddedLanguageFormatting: "off",
     plugins: oxcPlugin ? [oxcPlugin] : [],
   }),
+  // bun-fmt's: prettier's minus `embeddedLanguageFormatting: "off"`, under which
+  // bun fmt refuses every .svelte file, and this case checks it on Svelte too.
+  "prettierrc-bun.json": JSON.stringify({ useTabs: true }),
   // Nothing ignored — the fixtures are passed as explicit file arguments, and
   // prettier's `--ignore-path` still needs the file to exist.
   prettierignore: "# self-test fixtures: nothing ignored\n",
@@ -127,6 +135,7 @@ const FIXTURES = {
   // to check the scope-parity rule itself.
   "clean2.ts": CLEAN_TS,
   "broken.svelte": BROKEN_SVELTE,
+  "broken-script.svelte": BROKEN_SVELTE_SCRIPT,
   "clean.svelte": CLEAN_SVELTE,
   "broken.json": BROKEN_JSON,
   "clean.md": CLEAN_MD,
@@ -204,6 +213,16 @@ function buildCases(formatters) {
       command: (f) => formatters.check["tsv-npm-bun"](f),
       detectsCommandErrors: true,
       reportsConsidered: true,
+    },
+    // Bun's own formatter. Its counts are prettier's and its rejections its own,
+    // and it runs in bench-svelte too, so it takes a Svelte pair as well, whose
+    // broken file is one it only warns about.
+    {
+      name: "bun-fmt",
+      command: (f) => formatters.check["bun-fmt"](f, "prettierrc-bun.json"),
+      detectsCommandErrors: true,
+      reportsConsidered: true,
+      embedded: { rejects: "broken-script.svelte", accepts: "clean.svelte" },
     },
   ];
 

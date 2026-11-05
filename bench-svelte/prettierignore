@@ -1,0 +1,2 @@
+# Nothing ignored: the snapshot holds only the corpus files. The bun-fmt row
+# names this file as its ignore path, the way the prettier rows do elsewhere.

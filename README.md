@@ -2,7 +2,7 @@
 
 This is a fork of [oxc-project/bench-formatter](https://github.com/oxc-project/bench-formatter)
 with [tsv](https://github.com/fuzdev/tsv) added.
-Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfmt** with **tsv** and **rsvelte-fmt**.
+Comparing execution time and memory usage of **Prettier**, **Biome**, **Oxfmt**, and **Bun**'s formatter with **tsv** and **rsvelte-fmt**.
 
 > **About this fork.** It adds [tsv](https://tsv.fuz.dev) — a native-Rust formatter for the JS/TS family, CSS, and Svelte — plus three scenarios and a set of guards against silently unfair comparisons. Upstream's own scenarios gain those guards and `bench-large-single-file` the tsv rows, and are otherwise changed little; [CLAUDE.md](CLAUDE.md) lists every deviation and the full methodology.
 >
@@ -18,6 +18,7 @@ Comparing execution time and memory usage of **Prettier**, **Biome**, and **Oxfm
 - [Biome](https://biomejs.dev/) Formatter
 - [Oxfmt](https://oxc.rs)
 - [rsvelte-fmt](https://github.com/baseballyama/rsvelte) (`@rsvelte/fmt`, Svelte scenario only)
+- [Bun](https://bun.sh/)'s built-in formatter (`bun fmt`, the `bun-fmt` row), in the three scenarios where tsv faces other formatters, configured from the same Prettier config as the Prettier row
 - [tsv](https://tsv.fuz.dev/), as up to five rows — one per way of running it:
 
 | Row                            | What is timed                                                                                                                                                   | Scenarios                 |
@@ -37,6 +38,8 @@ and ~3 ms of pnpm's `.bin/` shell shim; the binary's own start is under 1 ms.
 **Read `tsv-npm` against the other formatters.** They are all timed through
 their npm bins, which start Node first too (Biome's and rsvelte-fmt's then spawn
 a native binary, exactly `tsv-npm`'s shape), so it is the like-for-like row.
+The exception is `bun-fmt`: `bun fmt` runs as the Bun binary itself, with no
+Node in front of it, so `tsv` is its counterpart.
 `tsv` is the engine's own cost, and the fixed baseline the memory ratios are
 taken against. `tsv-npm`'s memory row is its Node launcher (~50 MB), not tsv —
 see the memory note under [Benchmark Details](#benchmark-details).

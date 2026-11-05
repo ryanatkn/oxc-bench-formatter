@@ -697,6 +697,24 @@ export function createFormatters(projectRoot, configDir) {
     `${bunBin} ${projectRoot}/node_modules/${TSV_NODE_BINS[row].pkg}/${TSV_NODE_BINS[row].script}`;
   const tsvNpmBun = onBun("tsv-npm");
   const tsvWasmBun = onBun("tsv-wasm");
+  // Bun's own formatter (`bun fmt`, new in 1.4.4): native, run as the bare
+  // binary, sharing the prettier row's config and ignore file. Each flag closes
+  // a way the run could format other than as configured:
+  // - `--config=/dev/null` (Bun's global flag, before `fmt`) loads no bunfig.toml.
+  //   A `[fmt]` section in one in the working directory or any parent merges into
+  //   the style even with `fmt --config` given.
+  // - `fmt --config` names the scenario's prettierrc.json. Bun decides a file's
+  //   config dialect from its name (`prettierrc.json` is read as Prettier's, a
+  //   `svelte.json` as oxfmt's), and an explicit config stops it reading the
+  //   corpus's nested configs. Without one it reads like oxfmt here, because this
+  //   repo's package.json lists oxfmt, and prints oxfmt's diagnostics too.
+  // - `--svelte`: with a config given, Svelte is off unless asked for.
+  // - `--no-script`: otherwise a `fmt` script in a package.json would run instead.
+  // - `--no-editorconfig`: an .editorconfig in a corpus would reach the style.
+  // The config must leave `embeddedLanguageFormatting` on wherever Svelte is in
+  // scope: with it "off", bun fmt refuses every .svelte file.
+  const bunFmt = (configFile) =>
+    `${bunBin} --config=/dev/null fmt --config=${configDir}/${configFile} --ignore-path=${configDir}/prettierignore --no-editorconfig --no-script --svelte --ignore-unknown`;
 
   // NOTE: Do not use `--experimental-cli`, as it seems to behave differently than the stable CLI...
   return {
@@ -736,6 +754,9 @@ export function createFormatters(projectRoot, configDir) {
     // commas) so break decisions and output volume are comparable.
     rsvelte: (files) => `${rsvelteEnv} ${rsvelteBin} --config ${configDir}/oxfmtrc.json ${files}`,
 
+    // Bun's formatter, configured like the prettier row (see `bunFmt` above).
+    "bun-fmt": (files, configFile = "prettierrc.json") => `${bunFmt(configFile)} ${files}`,
+
     // Check-mode counterparts: identical scope and config, no writes. Preflight
     // reads their diagnostics to learn which files each formatter rejects.
     check: {
@@ -759,6 +780,16 @@ export function createFormatters(projectRoot, configDir) {
 
       rsvelte: (files) =>
         `${rsvelteEnv} ${rsvelteBin} --check --config ${configDir}/oxfmtrc.json ${files}`,
+
+      // `--check` names only the files it would change, so the file count the
+      // scope comparison needs comes from a `--list-files` pass with the same
+      // flags, printed first. A listing that fails prints a wrong count, which
+      // the comparison then refuses. Grouped so `runPreflight`'s redirect takes
+      // both, and the group's exit status is the check's.
+      "bun-fmt": (files, configFile = "prettierrc.json") => {
+        const cmd = bunFmt(configFile);
+        return `{ echo "bun-fmt: $(${cmd} --list-files ${files} | wc -l) files listed"; ${cmd} --check ${files}; }`;
+      },
     },
   };
 }
@@ -948,6 +979,13 @@ const PREFLIGHT_MATCHERS = {
   // files to arrive in oxfmt's format, which is fine while the corpus is
   // .svelte-only.
   "rsvelte-fmt": /^rsvelte-fmt: (.+?\.svelte): /gm, // rsvelte-fmt: path: rsvelte_formatter error: ...
+  // `error: message` with the path on the next line, `    at path:line:col`.
+  // Both lines are required, so a command-level `error:` names no file. A
+  // `warn:` of the same shape counts too: a .svelte file's <script> or <style>
+  // that fails to parse is a warning, the block is left as written, the rest of
+  // the file is formatted, and the exit status is 0 — a file it did only part
+  // of the work on, which a check would otherwise call clean.
+  "bun-fmt": new RegExp(String.raw`^(?:error|warn): .*\n +at (${SOURCE_PATH}):\d+:\d+$`, "gm"),
 };
 
 // How each tool reports the size of the job it just did.
@@ -1001,6 +1039,14 @@ const PREFLIGHT_SCOPE_COUNTS = {
     considered: /would reformat \d+ \/ (\d+) files/m,
     changed: /would reformat (\d+) \/ \d+ files/m,
   },
+  // Its Prettier flavor prints prettier's own `[warn] path` lines and its
+  // "All matched files use Prettier code style!", so the would-change count is
+  // prettier's. The file count is the `--list-files` line its check command
+  // prints ahead of the check (`wc -l` pads it on some platforms).
+  "bun-fmt": {
+    considered: /^bun-fmt: +(\d+) files listed$/m,
+    changed: countPrettierWarnings,
+  },
 };
 
 const PRETTIER_WARNED_FILE = new RegExp(String.raw`^\[warn\] (${PRETTIER_PATH})$`, "gm");
@@ -1052,6 +1098,9 @@ const PREFLIGHT_ERROR_SIGNALS = {
   // which preflight already treats as a launch failure.
   "tsv-npm-bun": /^error: |^warning: @fuzdev\/tsv could not run its native CLI/m,
   "tsv-wasm-bun": /^error: /m,
+  // A path that matches nothing prints `error: No files matching the pattern
+  // were found` under prettier's all-clear line, and exits 2.
+  "bun-fmt": /^error: /m,
 };
 
 /**

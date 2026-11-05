@@ -35,6 +35,12 @@ A benchmark suite comparing JS/TS formatters on **execution time** (via
 - **tsv-npm-bun / tsv-wasm-bun** — the two rows above on Bun's runtime (the
   pinned `bun` devDependency), what `bunx --bun tsv` runs. Only in
   `bench-tsv-delivery`. See "The Bun rows".
+- **bun-fmt** (`bun fmt`) — Bun's own built-in formatter, the pinned `bun`
+  devDependency's binary run directly: native, Prettier-compatible, and
+  configured from the same `prettierrc.json` as the prettier row. Runs in the
+  three scenarios where tsv faces other formatters (`bench-ts-only`,
+  `bench-large-single-file`, `bench-svelte`). Also fork-added. See "The bun-fmt
+  row".
 
 This suite measures the whole **CLI** (process spawn + I/O + multi-file parallel
 batch + RSS). A complementary fork,
@@ -54,13 +60,13 @@ runs `vp staged`. Package manager is pnpm 11 (pinned by `packageManager`); Node 
 What a merge from `oxc-project/bench-formatter` has to reconcile. Everything else
 is upstream's, untouched.
 
-- **Three formatters added**: tsv (the native binary from `@fuzdev/tsv`'s
-  platform package, or `TSV_BIN`), rsvelte-fmt, and tsv-wasm — plus a tsv-npm
-  row that is tsv again through its Node dispatcher, and tsv-npm-bun /
+- **Four formatters added**: tsv (the native binary from `@fuzdev/tsv`'s
+  platform package, or `TSV_BIN`), rsvelte-fmt, tsv-wasm and bun-fmt — plus a
+  tsv-npm row that is tsv again through its Node dispatcher, and tsv-npm-bun /
   tsv-wasm-bun, the two JS entry points on Bun.
 - **Three scenarios added**: `bench-ts-only`, `bench-svelte`,
   `bench-tsv-delivery` — plus their entries in `bench-all.mjs` and `init.sh`.
-- **`bench-large-single-file`** (upstream's) gained a tsv row and a tsv-npm row,
+- **`bench-large-single-file`** (upstream's) gained a tsv row, a tsv-npm row and a bun-fmt row,
   a preflight pass, tsv's style profile on the other four formatters, the settle
   between commands the other tsv scenarios take, and lost
   `--ignore-failure`
@@ -135,8 +141,8 @@ bench-formatter/
 ├── bench-js-no-embedded/
 ├── bench-mixed-embedded/
 ├── bench-full-features/
-├── bench-ts-only/                   # non-JSX scenario added by this fork (all 5 formatters incl. tsv, plus tsv-npm)
-├── bench-svelte/                    # Svelte scenario added by this fork (tsv + tsv-npm vs rsvelte-fmt only)
+├── bench-ts-only/                   # non-JSX scenario added by this fork (all 5 formatters incl. tsv, plus tsv-npm and bun-fmt)
+├── bench-svelte/                    # Svelte scenario added by this fork (tsv + tsv-npm vs rsvelte-fmt and bun-fmt)
 ├── bench-tsv-delivery/              # what each tsv distribution costs (native, npm, WASM; Node and Bun), fork-added
 ├── vite.config.ts / pnpm-workspace.yaml  # vite-plus tooling + catalog
 └── .github/workflows/               # ci.yml, security, update-readme
@@ -155,8 +161,9 @@ bench-<name>/
 └── data/               # test corpus — gitignored; cloned or downloaded by init.sh
 ```
 
-`bench-svelte/` deviates from this shape: its only config is `oxfmtrc.json`
-(rsvelte-fmt's; tsv takes none), plus `corpora-pin.mjs` (the one place its corpus
+`bench-svelte/` deviates from this shape: its configs are `oxfmtrc.json`
+(rsvelte-fmt's; tsv takes none) and `prettierrc.json` + `prettierignore`
+(bun-fmt's — no prettier row runs there), plus `corpora-pin.mjs` (the one place its corpus
 is pinned) and `setup-corpus.mjs` (builds `data/` from the fuzdev/corpora snapshot
 at that pin, out of a sibling `../corpora` checkout or a gitignored `corpora/`
 fetch cache) — see "The rsvelte-fmt integration" below.
@@ -189,6 +196,9 @@ all, since all of its rows are tsv and tsv is non-configurable.
     `@rsvelte/fmt` npm bin (a Node launcher that execs a platform-native binary
     and points it at the project's oxfmt for non-`.svelte` files). Configurable,
     unlike tsv; only `bench-svelte` uses it.
+  - `"bun-fmt"(files, cfg = "prettierrc.json")` → `<bunBin> --config=/dev/null fmt --config <dir>/<cfg> --ignore-path <dir>/prettierignore --no-editorconfig --no-script --svelte --ignore-unknown <files>`
+    — Bun's formatter on the same binary the Bun rows run, configured and
+    scoped like the prettier row. Why each flag is there: "The bun-fmt row".
   - Note in the source: do **not** pass prettier `--experimental-cli` (it
     behaves differently from the stable CLI).
 - **`runHyperfine(args)`** — spawns `hyperfine` (stdio inherited, plus the run
@@ -200,8 +210,8 @@ all, since all of its rows are tsv and tsv is non-configurable.
   launcher and the native binary it spawns are never added together. So biome's
   and rsvelte-fmt's rows are their native binary's peak without the ~45 MB Node
   launcher in front of it, tsv-npm's row is the Node dispatcher's own peak with
-  tsv's hidden under it, and the single-process tools (prettier, oxfmt, tsv,
-  tsv-wasm) are whole. It understates the launcher-style tools, never the others. Auto-detects `gtime` then `/usr/bin/time`; `checkGnuTime()` warns
+  tsv's hidden under it, and the single-process tools (prettier, oxfmt, bun-fmt,
+  tsv, tsv-wasm) are whole. It understates the launcher-style tools, never the others. Auto-detects `gtime` then `/usr/bin/time`; `checkGnuTime()` warns
   and skips memory if neither. `baseline` (required) names the row every ratio
   is taken against — tsv in the tsv scenarios, oxfmt in upstream's — so the
   column doesn't re-anchor on whichever tool used least that run; a ratio below
@@ -295,12 +305,12 @@ all, since all of its rows are tsv and tsv is non-configurable.
 
 | Dir                       | Corpus                                                                         | Reset / prepare                                                                          | warmup × runs | Formatters run                      |
 | ------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------- | ----------------------------------- |
-| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                       | `cp parser.ts.bak parser.ts`                                                             | 3 × 20        | all 5 (incl. tsv), tsv-npm          |
+| `bench-large-single-file` | TS compiler `parser.ts` (~540KB, v5.9.2)                                       | `cp parser.ts.bak parser.ts`                                                             | 3 × 20        | all 5 (incl. tsv), tsv-npm, bun-fmt |
 | `bench-js-no-embedded`    | [outline](https://github.com/outline/outline) (js/ts/jsx/tsx)                  | `resetCorpusCommand`                                                                     | 3 × 10        | all 4 (no tsv — JSX/TSX)            |
 | `bench-mixed-embedded`    | [storybook](https://github.com/storybookjs/storybook) (embedded langs)         | `resetCorpusCommand` + rm stray prettier configs + rm rejected files                     | 1 × 3         | prettier+oxc, oxfmt                 |
 | `bench-full-features`     | [continue](https://github.com/continuedev/continue) (sort-imports + tailwind)  | `resetCorpusCommand` + strip a tailwind `require` + rm `.prettierrc` + rm rejected files | 1 × 3         | prettier+oxc, oxfmt                 |
-| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset                  | `resetCorpusCommand` (its own outline checkout)                                          | 3 × 10        | all 5 (incl. tsv), tsv-npm          |
-| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section) | `resetCorpusCommand` (snapshot repo built by `setup-corpus.mjs`)                         | 3 × 10        | tsv, tsv-npm, rsvelte-fmt           |
+| `bench-ts-only`           | [outline](https://github.com/outline/outline), non-JSX subset                  | `resetCorpusCommand` (its own outline checkout)                                          | 3 × 10        | all 5 (incl. tsv), tsv-npm, bun-fmt |
+| `bench-svelte`            | `.svelte` snapshot: kit + svelte.dev + 5 Svelte libs (see rsvelte-fmt section) | `resetCorpusCommand` (snapshot repo built by `setup-corpus.mjs`)                         | 3 × 10        | tsv, tsv-npm, rsvelte-fmt, bun-fmt  |
 | `bench-tsv-delivery`      | TS compiler `parser.ts` again (its own copy)                                   | `cp parser.ts.bak parser.ts`                                                             | 3 × 20        | tsv, tsv-npm, tsv-wasm, both on Bun |
 
 **Quick runs**: every scenario takes `BENCH_WARMUP` / `BENCH_RUNS` overrides via
@@ -344,14 +354,15 @@ error it attributes to no file — each must read as "unknown coverage", never a
 clean. That last one is the plugin-and-config case: prettier with an unresolvable
 plugin, or any tool handed a path that matched nothing, exits non-zero having
 formatted nothing, and would then be timed doing no work at all. Only prettier,
-prettier+oxc-parser, and tsv's rows are covered (`PREFLIGHT_ERROR_SIGNALS`) — biome calls
+prettier+oxc-parser, bun-fmt, and tsv's rows are covered (`PREFLIGHT_ERROR_SIGNALS`) — biome calls
 formatting diffs "errors" and oxfmt's failure text names no file, so neither has a
 signal that couldn't fire on an ordinary run.
 
 **Preflight also cross-checks scope**, from counts the same check output already
 carries: every formatter that reports how many files it looked at (biome `Checked
 N files`, oxfmt `Finished … on N files`, tsv `N would change, M unchanged`,
-rsvelte-fmt `would reformat N / M files`) must report the **same** number, and
+rsvelte-fmt `would reformat N / M files`, bun-fmt the `--list-files` count its
+check command prints ahead of the check) must report the **same** number, and
 every formatter must find at least one file to change. The first turns "all three
 self-report 1648" from a hand-verified footnote into a per-run assertion — the
 three scoping mechanisms are unrelated, so they drift silently. The second catches
@@ -485,8 +496,8 @@ and every npm-bin row starts — since a version change moves the floor and the
 five Node-launched rows above it without any formatter having changed.
 
 **Concurrency, when reading the numbers:** the harness never caps threads, so
-each formatter runs at its own default — tsv, oxfmt, biome, and rsvelte-fmt
-parallelize across files; prettier is effectively single-threaded. So on the multi-file scenarios
+each formatter runs at its own default — tsv, oxfmt, biome, rsvelte-fmt and
+bun-fmt parallelize across files; prettier is effectively single-threaded. So on the multi-file scenarios
 the wall-clock comparison bakes in each tool's own parallelism (a User-time far
 above wall-time is the tell for the parallel ones), which is the intended
 real-world measure. **No thread flags are passed, deliberately**: oxfmt has
@@ -516,9 +527,9 @@ non-configurable — width 100, tabs, single quotes, no trailing commas — and 
 cannot be aligned down to a rival's defaults, so the rivals are aligned up to it.
 The three scenarios where tsv faces another formatter
 (`bench-large-single-file`, `bench-ts-only`, `bench-svelte`) set that same
-profile for prettier, prettier+oxc-parser, biome, oxfmt, and rsvelte-fmt, in each
-tool's own dialect: prettier/oxfmt take `printWidth` + `useTabs` + `singleQuote` +
-`trailingComma`, biome takes `formatter.lineWidth` + `indentStyle` and
+profile for prettier, prettier+oxc-parser, biome, oxfmt, rsvelte-fmt and bun-fmt,
+in each tool's own dialect: prettier/oxfmt take `printWidth` + `useTabs` +
+`singleQuote` + `trailingComma` (bun-fmt reads the prettier row's file), biome takes `formatter.lineWidth` + `indentStyle` and
 `javascript.formatter.quoteStyle` + `trailingCommas`. `bench-tsv-delivery` needs
 none of it — all of its rows are tsv, at tsv's one style by construction.
 
@@ -695,7 +706,7 @@ dirty ignores `README.md` and `results.json`, a previous run's output),
 as tsv's own bench reports write it — the site checks the two agree),
 `node_startup`, `versions` keyed by formatter name plus
 `@prettier/plugin-oxc` (the prettier+oxc-parser row's plugin) and the `node` the
-Node-launched rows ran on and the `bun` the Bun rows ran on (tsv's a bare
+Node-launched rows ran on and the `bun` the Bun rows and bun-fmt ran on (tsv's a bare
 version), `tsv_binary` (where the native
 tsv rows' binary came from: the platform package, or a dated `TSV_BIN` build),
 and one record per scenario in run order — `id` (the slug of the
@@ -894,7 +905,7 @@ Candidates:
   scoped alike. prettier's check output names only the files it would change;
   today oxfmt's count there has nothing to be compared with.
 - Command-level error signals for biome and oxfmt. `PREFLIGHT_ERROR_SIGNALS` covers
-  prettier and every tsv row; the other two have no error prefix that couldn't fire on an
+  prettier, bun-fmt and every tsv row; the other two have no error prefix that couldn't fire on an
   ordinary check run, so a failure that formats nothing still reads as clean there.
   A file-count assertion ("the tool reported looking at ≥ 1 files") would cover all
   of them, at the cost of another per-tool matcher to keep alive.
@@ -984,7 +995,7 @@ formatters, on `.svelte` files only.
   place last, so an interrupted build never leaves a half-corpus). Regenerate with
   `rm -rf bench-svelte/data && node ./bench-svelte/setup-corpus.mjs`.
 - **No `--ignore-failure`**, as in every scenario, and here with a known reason
-  to matter: both formatters exit 0
+  to matter: every formatter there exits 0
   on a successful write run, so any non-zero exit here is a real error — and
   rsvelte-fmt 0.7.x has a SIGABRT (its launcher propagates signal deaths as exit
   128+n, e.g. 134) that must abort the benchmark rather than be timed as a fast
@@ -1132,6 +1143,52 @@ of Node, so the delivery scenario answers "and on the other runtime?" too.
 - **Version**: the resolved binary's `--version`, published as `**Bun**` and
   `versions.bun` in `results.json` — a new key that tsv.fuz.dev's schema has to
   learn before it reads a run that carries it.
+
+## The bun-fmt row
+
+`bun fmt` is Bun's own formatter, new in 1.4.4: native, Prettier-compatible,
+and multi-threaded across files by default. Unlike the Bun rows above it is a
+different formatter, not another tsv delivery, so it runs in the three
+scenarios where tsv faces other formatters (`bench-ts-only`,
+`bench-large-single-file`, `bench-svelte`) and not in `bench-tsv-delivery`.
+
+- **Binary**: the same `resolveBun` binary as the Bun rows, run as `bun fmt`
+  directly — how Bun users run it, with no Node in front. So bare `tsv` is its
+  counterpart, not `tsv-npm`. It formats every file natively in these scenarios
+  (`bun fmt --doctor` says so per run directory) and spawns nothing, so its
+  memory row is the whole job.
+- **Configured like the prettier row**: `fmt --config <dir>/prettierrc.json` and
+  `--ignore-path <dir>/prettierignore`, the files the prettier row reads, so its
+  style and scope follow theirs. `bench-svelte` runs no prettier row, so it
+  carries the two files for bun-fmt alone; its `prettierrc.json` leaves out the
+  `embeddedLanguageFormatting: "off"` the other two scenarios set, because under
+  it bun fmt refuses every `.svelte` file.
+- **Each other flag closes a way it would not format as configured**, all
+  verified against 1.4.4:
+  - `bun --config=/dev/null` (Bun's global flag, before `fmt`): a `[fmt]` section
+    in a `bunfig.toml` in the working directory or any parent merges into the
+    style even with `fmt --config` given. A global `~/.bunfig.toml` does not.
+  - The config file's **name** decides its dialect: `prettierrc.json` is read as
+    Prettier's, a `svelte.json` as oxfmt's. Without any config it formats like
+    oxfmt in this repo (because `package.json` lists oxfmt) and prints oxfmt's
+    diagnostics. The explicit config also stops it reading configs nested in a
+    corpus.
+  - `--svelte`: with a config given, Svelte is off unless asked for.
+  - `--no-script`: otherwise a `fmt` script in a `package.json` runs instead.
+  - `--no-editorconfig`: an `.editorconfig` in a corpus reaches the style.
+- **Preflight**: in the Prettier flavor it prints prettier's `[warn] path` lines
+  and all-clear sentence, so its would-change count is `countPrettierWarnings`.
+  `--check` reports no file count, so its check command runs `--list-files` with
+  the same flags first and prints `bun-fmt: N files listed`; a listing that fails
+  prints a wrong count, which the parity rule refuses. Rejections are
+  `error: <message>` followed by `at <path>:<line>:<col>`, and also **`warn:`** of
+  the same shape: a `.svelte` file whose `<script>` or `<style>` fails to parse
+  gets only a warning, that block is left as written, the rest of the file is
+  formatted, and the exit status is 0. A check would call that file clean, so
+  the matcher counts it as rejected; the self-test's `broken-script.svelte` is
+  that case.
+- **Version**: `versions.bun`, the binary's `--version` — the same binary the
+  Bun rows run.
 
 ## The tsv-npm row
 
