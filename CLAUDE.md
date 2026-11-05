@@ -772,6 +772,14 @@ record, never `results.json`.
 - **A formatter benched against tsv** is pinned to tsv's fixed style (width 100,
   tabs, single quotes, no trailing commas) in that scenario's config, in whatever
   dialect the tool speaks.
+- **Probe the new tool before trusting its diagnostics**, inside this repo, not
+  a scratch directory: run its check on a broken file, a file with a broken
+  embedded block (a `.svelte` `<script>`), a path that matches nothing, and with
+  a stray config of every kind it reads placed in the working directory, a
+  parent and the corpus. bun-fmt changed style because of what this repo's
+  `package.json` lists, took a parent's `bunfig.toml` under `--no-config`, and
+  only warned, exit 0, on a file it formatted part of (see "The bun-fmt row").
+  Each of those reads as clean to a preflight written from its `--help` alone.
 
 ## The tsv integration
 
@@ -1147,7 +1155,9 @@ of Node, so the delivery scenario answers "and on the other runtime?" too.
 ## The bun-fmt row
 
 `bun fmt` is Bun's own formatter, new in 1.4.4: native, Prettier-compatible,
-and multi-threaded across files by default. Unlike the Bun rows above it is a
+and multi-threaded across files by default. The row needs the pinned `bun` at
+1.4.4 or later; an older one has no `fmt` command, and preflight reports the row
+unavailable. Unlike the Bun rows above it is a
 different formatter, not another tsv delivery, so it runs in the three
 scenarios where tsv faces other formatters (`bench-ts-only`,
 `bench-large-single-file`, `bench-svelte`) and not in `bench-tsv-delivery`.
@@ -1172,7 +1182,8 @@ scenarios where tsv faces other formatters (`bench-ts-only`,
     Prettier's, a `svelte.json` as oxfmt's. Without any config it formats like
     oxfmt in this repo (because `package.json` lists oxfmt) and prints oxfmt's
     diagnostics. The explicit config also stops it reading configs nested in a
-    corpus.
+    corpus (a nested `.prettierrc` and a `package.json` `prettier` key, both
+    checked).
   - `--svelte`: with a config given, Svelte is off unless asked for.
   - `--no-script`: otherwise a `fmt` script in a `package.json` runs instead.
   - `--no-editorconfig`: an `.editorconfig` in a corpus reaches the style.
