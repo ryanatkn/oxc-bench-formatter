@@ -21,7 +21,7 @@ A benchmark suite comparing JS/TS formatters on **execution time** (via
   fork's addition over upstream.
 - **rsvelte-fmt** (`rsvelte-fmt`) — `@rsvelte/fmt`, Rust Svelte formatter that
   formats `.svelte` in-process and delegates other files to oxfmt; runs only in
-  `bench-svelte`, head-to-head with tsv. Also fork-added.
+  `bench-svelte`, head-to-head with tsv and bun-fmt. Also fork-added.
 - **tsv-npm** (`@fuzdev/tsv`'s `tsv` bin) — the same native binary reached
   through the package's Node dispatcher, the way `npx tsv` and most npm installs
   run it. Runs beside native tsv in every scenario tsv appears in: in
@@ -789,13 +789,13 @@ lives:
 
 - **Binary**: `tsv` from the `tsv_cli` crate, as shipped in the
   `@fuzdev/tsv-<triple>` platform package that `@fuzdev/tsv` pulls in for this
-  machine — the same `cargo build --locked -p tsv_cli --release` (LTO, one
-  codegen unit, abort, stripped) a local build makes, which an A/B against a
-  build of the same tag confirmed within run-to-run noise. It's a native Rust
-  binary, not an npm `.bin`, so `createFormatters` resolves it via `resolveTsv`
-  (`TSV_BIN`, else the platform package) rather than `node_modules/.bin` (full
-  detail, including the local-build path, under "Setting up the tsv binary"
-  below).
+  machine. Since tsv 0.8.1 that binary is profile-guided: the release pipeline
+  profiles the CLI on a training corpus and rebuilds it with that profile, so a
+  plain `cargo build --release -p tsv_cli` of the same tag is the same code but
+  not the same binary, and formats slower. It's a native Rust binary, not an npm
+  `.bin`, so `createFormatters` resolves it via `resolveTsv` (`TSV_BIN`, else
+  the platform package) rather than `node_modules/.bin` (full detail, including
+  the local-build path, under "Setting up the tsv binary" below).
 - **In-place, non-configurable**: `tsv format <paths>` writes only when output
   differs and takes no config file or flags — it slots straight into the
   reset-then-format-then-measure loop.
@@ -825,9 +825,10 @@ lives:
   (at any depth, not just the repo root), always pruning `.git`/`node_modules`;
   outside a repo it applies a build-output heuristic (`dist`/`build`/`target` +
   hidden dirs) and warns that a `.prettierignore` won't be read. Because tsv self-scopes by
-  extension while the other three are scoped by config, **the corpus decides
+  extension while the others are scoped by config, **the corpus decides
   whether they agree** — on outline, tsv discovers exactly 1648 files
-  (1339 `.ts` + 308 `.js` + 1 `.mjs`) and biome and oxfmt each self-report the same 1648. Preflight now asserts that agreement on every run rather than leaving it to
+  (1339 `.ts` + 308 `.js` + 1 `.mjs`) and biome, oxfmt and bun-fmt (which reads the prettier row's
+  `prettierignore`) each self-report the same 1648. Preflight now asserts that agreement on every run rather than leaving it to
   a periodic hand-check, and `assertScopeConfigsAgree` checks the three scoping
   files name the same extensions before the corpus is even read. It holds _because_ outline has no `.svelte`/`.css` (which tsv would grab
   and the JS/TS-scoped configs would skip) and no in-corpus `.prettierignore` at
@@ -884,6 +885,14 @@ platform package. Two ways to get one in place:
   TSV_BIN=../tsv/target/release/tsv pnpm run bench
   ```
 
+  A plain build is not what ships: the platform package's binary is
+  profile-guided, so plain `TSV_BIN` rows run slower than the npm rows they
+  stand in for. To bench what a release would ship, build the PGO binary
+  instead — `deno task build:pgo` in the tsv repo (it needs the `../corpora`
+  snapshot and `llvm-tools-preview`, also builds tsv's N-API addon and C FFI
+  library, and restages `crates/tsv_napi/pkg/<triple>/` with the PGO pair) — and
+  run with `TSV_BIN=../tsv/.pgo/target-use/release/tsv`.
+
   `TSV_BIN` is used as-is — nothing rebuilds or overwrites it — and
   `update-readme` reads the version from the binary and stamps the line with
   the file's mtime, since a local build's version string doesn't move between
@@ -928,8 +937,8 @@ README Results afterward.
 [`@rsvelte/fmt`](https://github.com/baseballyama/rsvelte) is the second
 fork-added formatter: a Rust Svelte formatter (rsvelte parser; `oxc_formatter`
 for `<script>`, `oxc_formatter_css` for `<style>`, both in-process) that runs
-only in `bench-svelte`, head-to-head with tsv — the two Svelte-native
-formatters, on `.svelte` files only.
+only in `bench-svelte`, head-to-head with tsv and bun-fmt, on `.svelte`
+files only.
 
 - **Binary**: the `rsvelte-fmt` npm bin — a Node launcher that resolves the
   platform-native binary plus the project's oxfmt and execs it. Every timed run
@@ -967,9 +976,9 @@ formatters, on `.svelte` files only.
   drowning out the other sources' styles. The selection is recorded in the
   snapshot's pin line beside the commit and tree, so changing it forces a rebuild.
   1,150 files / ~3.0MB at the current pin, no source over a third of them, all
-  third-party and shaped by prettier (kit's few by oxfmt) — neither benched formatter is measured on code
-  it already shaped, and both would rewrite over 80% of the files, so write volume
-  is symmetric too. That fairness premise is checked, not assumed: the manifest names
+  third-party and shaped by prettier (kit's few by oxfmt) — no benched formatter
+  is measured on code it already shaped, and all three would rewrite over 80% of
+  the files, so write volume is symmetric too. That fairness premise is checked, not assumed: the manifest names
   who shaped each collection (`shaped_by`), and the build refuses one shaped by a
   formatter this scenario benches.
 - **Where the bytes come from, and what is pinned.** The script never reads a
@@ -985,12 +994,13 @@ formatters, on `.svelte` files only.
   build asserts the commit carries that tree, plus an `EXPECTED_FILES` count so a
   pin bump that moves the corpus has to say so in the diff. Bumping the pin is
   those three constants.
-- **Why a snapshot, and why `git init`**: the two tools discover files
+- **Why a snapshot, and why `git init`**: the three tools discover files
   differently (tsv is config-free and gitignore-aware; rsvelte-fmt walks
   `.svelte` itself and hands the rest of a directory to oxfmt, which would pick
-  up `.json`/`.md`/etc), so a tree containing only the corpus files is the one
-  way to pin both to the same set — both self-report the same count (1,150 at the
-  current pin), which preflight now asserts every run. The
+  up `.json`/`.md`/etc; bun-fmt is scoped by `--ignore-path prettierignore`), so
+  a tree containing only the corpus files is the one way to pin all three to the
+  same set — all three self-report the same count (1,150 at the current pin),
+  which preflight asserts every run. The
   `git init` makes `data/` its own git root (sidestepping the outer
   `.gitignore` trap described above) and provides the reset-per-run baseline;
   provenance (the corpora pin line, then per-source commit + file count) is
@@ -1149,8 +1159,9 @@ of Node, so the delivery scenario answers "and on the other runtime?" too.
   runs well above wall on one file for the same reason tsv-wasm's does: the
   engine tiers wasm up on background threads.
 - **Version**: the resolved binary's `--version`, published as `**Bun**` and
-  `versions.bun` in `results.json` — a new key that tsv.fuz.dev's schema has to
-  learn before it reads a run that carries it.
+  `versions.bun` in `results.json`. tsv.fuz.dev requires it to equal the
+  Bun version tsv's in-process cross-runtime report ran on, so refresh both on the
+  same Bun.
 
 ## The bun-fmt row
 
@@ -1198,6 +1209,12 @@ scenarios where tsv faces other formatters (`bench-ts-only`,
   formatted, and the exit status is 0. A check would call that file clean, so
   the matcher counts it as rejected; the self-test's `broken-script.svelte` is
   that case.
+- **Reading its row**: its counterpart is the bare `tsv` row, not `tsv-npm`
+  (neither has a launcher in front), so read ratios against `tsv`, which is also
+  the scenario's fixed memory baseline. On the single file both rows are mostly
+  process start and one thread's work, so they sit close; the multi-file
+  scenarios are where the two engines and thread pools separate. tsv.fuz.dev
+  quotes it the same way, one reading per scenario against the bare binary.
 - **Version**: `versions.bun`, the binary's `--version` — the same binary the
   Bun rows run.
 

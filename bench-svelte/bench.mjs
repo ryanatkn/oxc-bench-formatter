@@ -80,7 +80,7 @@ async function main() {
   printCorpus(`${describePin()}, snapshot ${describeCorpus(dataDir)}`);
   printRunCounts();
   console.log("- Git reset before each run");
-  console.log("- .svelte only: the Svelte-native formatters head-to-head");
+  console.log("- .svelte only: tsv against rsvelte-fmt and bun-fmt");
   console.log("");
 
   // tsv runs twice: rsvelte-fmt is timed through its npm bin, a Node launcher

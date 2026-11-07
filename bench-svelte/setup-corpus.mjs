@@ -72,7 +72,7 @@ const cacheDir = resolve("./corpora");
 const siblingDir = resolve("../../corpora");
 
 // Formatters benched by bench.mjs, as corpora's manifest would name them.
-const BENCHED_FORMATTERS = new Set(["tsv", "rsvelte-fmt"]);
+const BENCHED_FORMATTERS = new Set(["tsv", "rsvelte-fmt", "bun-fmt"]);
 
 function fail(message) {
   console.error(message);
